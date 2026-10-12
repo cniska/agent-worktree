@@ -1,0 +1,101 @@
+import { afterAll, describe, expect, test } from "bun:test";
+import { existsSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { cli, fixture, hookEvent, removeScratchDirs, repo, scratchDir } from "./repo.test-support";
+
+afterAll(removeScratchDirs);
+
+describe("the cli", () => {
+  test("lists the commands on stdout with no arguments and with --help", () => {
+    const dir = scratchDir();
+    const bare = cli(dir, []);
+    expect(bare.status).toBe(0);
+    expect(bare.stderr).toBe("");
+    expect(bare.stdout).toContain("agent-worktrees create <name>");
+    expect(bare.stdout).toContain("agent-worktrees remove [--force] <name>");
+    expect(cli(dir, ["--help"]).stdout).toBe(bare.stdout);
+  });
+
+  test("describes one command with --help", () => {
+    const run = cli(scratchDir(), ["remove", "--help"]);
+    expect(run.status).toBe(0);
+    expect(run.stdout).toStartWith("agent-worktrees remove [--force] <name>");
+    expect(run.stdout).toContain("run teardown and remove the worktree");
+  });
+
+  test("refuses an unknown command with exit 2, without creating anything", () => {
+    const { dir, path } = fixture();
+    const run = cli(dir, ["task-a"]);
+    expect(run.status).toBe(2);
+    expect(run.stdout).toBe("");
+    expect(run.stderr).toBe(
+      "agent-worktrees: task-a is not an agent-worktrees command; agent-worktrees with no command lists them\n  agent-worktrees create|init|remove|prune|ls|path|hook\n",
+    );
+    expect(existsSync(path("task-a"))).toBe(false);
+  });
+
+  test("prints a refusal on stderr as the command, the message and the act, and exits 1", () => {
+    const dir = scratchDir();
+    expect(cli(dir, ["ls"])).toEqual({
+      status: 1,
+      stdout: "",
+      stderr: `agent-worktrees ls: ${dir} is not inside a git checkout\n  cd into the project's checkout and run the command again\n`,
+    });
+  });
+
+  test("prints a usage refusal with the usage as the act, and exits 2", () => {
+    const run = cli(scratchDir(), ["remove", "--bogus", "task-a"]);
+    expect(run.status).toBe(2);
+    expect(run.stderr).toStartWith("agent-worktrees remove: Unknown option '--bogus'.");
+    expect(run.stderr).toEndWith("\n  agent-worktrees remove [--force] <name>\n");
+    expect(cli(scratchDir(), ["remove", "a", "b"])).toEqual({
+      status: 2,
+      stdout: "",
+      stderr:
+        "agent-worktrees remove: agent-worktrees remove takes one worktree name, and got: a b\n  agent-worktrees remove [--force] <name>\n",
+    });
+  });
+
+  test("prints a result on stdout and exits 0", () => {
+    const dir = repo();
+    expect(cli(dir, ["path", "task-a"])).toEqual({
+      status: 0,
+      stdout: `${dir}/.claude/worktrees/task-a\n`,
+      stderr: "",
+    });
+  });
+
+  test("ls keeps stdout empty and notes on stderr when there is nothing to list", () => {
+    expect(cli(repo(), ["ls"])).toEqual({
+      status: 0,
+      stdout: "",
+      stderr: "agent-worktrees: no task worktrees\n",
+    });
+  });
+
+  test("hook reads a WorktreeCreate event from stdin and prints only the path", () => {
+    const { dir, path } = fixture();
+    const run = cli(dir, ["hook"], hookEvent({ hook_event_name: "WorktreeCreate", name: "task-a" }));
+    expect(run.status).toBe(0);
+    expect(run.stdout).toBe(`${path("task-a")}\n`);
+    expect(cli(dir, ["ls"]).stdout).toBe(`task-a\tready\ttask-a\t${path("task-a")}\n`);
+  });
+
+  test("hook reads a WorktreeRemove event from stdin and removes by force, run from inside the worktree", () => {
+    const { dir, path } = fixture();
+    cli(dir, ["create", "task-a"]);
+    writeFileSync(join(path("task-a"), "scratch"), "untracked");
+    const run = cli(
+      path("task-a"),
+      ["hook"],
+      hookEvent({ hook_event_name: "WorktreeRemove", worktree_path: path("task-a") }),
+    );
+    expect(run).toEqual({ status: 0, stdout: "branch task-a kept\n", stderr: "" });
+    expect(existsSync(path("task-a"))).toBe(false);
+    expect(cli(dir, ["ls"])).toEqual({
+      status: 0,
+      stdout: "",
+      stderr: "agent-worktrees: no task worktrees\n",
+    });
+  });
+});

@@ -1,0 +1,3 @@
+# agent-worktrees
+
+Task worktrees are made with `agent-worktrees`. To work on a task in its own checkout, run `agent-worktrees create <name>` in the repository and work in the path it prints; EnterWorktree and a subagent's `isolation: "worktree"` go through the same tool. Never use `git worktree add` or `git worktree remove`. When the task's work is committed, run `agent-worktrees remove <name>`. A refusal names the act that resolves it; do it rather than working around the tool.

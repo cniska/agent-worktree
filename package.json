@@ -1,0 +1,23 @@
+{
+  "name": "agent-worktrees",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "agent-worktrees": "./bin/agent-worktrees"
+  },
+  "scripts": {
+    "format": "bunx biome check --write src",
+    "lint": "bunx biome check --error-on-warnings src",
+    "typecheck": "bunx tsc --noEmit",
+    "test": "bun test",
+    "check": "bun run lint && bun run typecheck && bun test",
+    "prepare": "! git rev-parse --git-dir >/dev/null 2>&1 || git config core.hooksPath .githooks"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.14",
+    "@types/bun": "^1.4.2",
+    "typescript": "^7.0.2"
+  }
+}

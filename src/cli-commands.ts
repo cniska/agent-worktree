@@ -1,0 +1,163 @@
+import { readFileSync } from "node:fs";
+import { unreachable } from "./assert";
+import { type Command, usageRefusal } from "./cli-contract";
+import type { Worktree } from "./git";
+import { parseHookEvent } from "./hook";
+import { note } from "./log";
+import { checkout, type Project, parseName, project, type WorktreeName, worktreePath } from "./project";
+import { create, init, type Listed, list, prune, remove } from "./worktrees";
+
+function noPositionals(positionals: readonly string[], command: Command): void {
+  if (positionals.length > 0)
+    throw usageRefusal(
+      `agent-worktrees ${command.name} takes no argument, and got: ${positionals.join(" ")}`,
+      command.usage,
+    );
+}
+
+function namedTarget(
+  positionals: readonly string[],
+  command: Command,
+): { project: Project; name: WorktreeName } {
+  const [raw, ...rest] = positionals;
+  if (raw === undefined || rest.length > 0)
+    throw usageRefusal(
+      `agent-worktrees ${command.name} takes one worktree name, and got: ${positionals.join(" ")}`,
+      command.usage,
+    );
+  const current = project(process.cwd());
+  return { project: current, name: parseName(current, raw) };
+}
+
+function removed(worktree: Worktree): string {
+  return worktree.branch === null ? "detached" : `branch ${worktree.branch} kept`;
+}
+
+function stateText(state: Listed["state"]): string {
+  switch (state.kind) {
+    case "unmanaged":
+      return "unmanaged";
+    case "orphaned":
+      return "orphaned (prune)";
+    case "unlisted":
+      return "unlisted";
+    case "pending":
+      return "setup pending";
+    case "ready":
+      return "ready";
+    default:
+      return unreachable(state);
+  }
+}
+
+function branchText(state: Listed["state"]): string {
+  if (state.kind === "unlisted" || state.worktree === null) return "unlisted";
+  return state.worktree.branch ?? "detached";
+}
+
+const NOTHING_LISTED = "no task worktrees";
+
+function listedLine({ path, state }: Listed): string {
+  return [state.name, stateText(state), branchText(state), path].join("\t");
+}
+
+const createCommand: Command = {
+  name: "create",
+  usage: "agent-worktrees create <name>",
+  summary: "create the worktree, run setup and print its path; rerun to resume a failed setup",
+  options: {},
+  run(positionals) {
+    const target = namedTarget(positionals, this);
+    return [create(target.project, target.name)];
+  },
+};
+
+const initCommand: Command = {
+  name: "init",
+  usage: "agent-worktrees init",
+  summary: "run setup in the current checkout, primary or task worktree",
+  options: {},
+  run(positionals) {
+    noPositionals(positionals, this);
+    const current = checkout(process.cwd());
+    init(current.project, current.toplevel);
+    return [];
+  },
+};
+
+const removeCommand: Command = {
+  name: "remove",
+  usage: "agent-worktrees remove [--force] <name>",
+  summary: "run teardown and remove the worktree, keeping its branch",
+  options: { force: { type: "boolean" } },
+  run(positionals, values) {
+    const target = namedTarget(positionals, this);
+    return [removed(remove(target.project, target.name, values.force === true))];
+  },
+};
+
+const pruneCommand: Command = {
+  name: "prune",
+  usage: "agent-worktrees prune",
+  summary: "prune git's stale worktree entries and tear down every registered worktree that is gone",
+  options: {},
+  run(positionals) {
+    noPositionals(positionals, this);
+    prune(project(process.cwd()));
+    return [];
+  },
+};
+
+const lsCommand: Command = {
+  name: "ls",
+  usage: "agent-worktrees ls",
+  summary: "list the worktrees: name, state, branch, path",
+  options: {},
+  run(positionals) {
+    noPositionals(positionals, this);
+    const lines = list(project(process.cwd())).map(listedLine);
+    if (lines.length === 0) note(NOTHING_LISTED);
+    return lines;
+  },
+};
+
+const pathCommand: Command = {
+  name: "path",
+  usage: "agent-worktrees path <name>",
+  summary: "print the worktree's path",
+  options: {},
+  run(positionals) {
+    const target = namedTarget(positionals, this);
+    return [worktreePath(target.project, target.name)];
+  },
+};
+
+const hookCommand: Command = {
+  name: "hook",
+  usage: "agent-worktrees hook",
+  summary: "handle a Claude Code WorktreeCreate or WorktreeRemove event read from stdin",
+  options: {},
+  run(positionals) {
+    noPositionals(positionals, this);
+    const current = project(process.cwd());
+    const { event, name } = parseHookEvent(current, readFileSync(0, "utf8"));
+    switch (event) {
+      case "WorktreeCreate":
+        return [create(current, name)];
+      case "WorktreeRemove":
+        return [removed(remove(current, name, true))];
+      default:
+        return unreachable(event);
+    }
+  },
+};
+
+export const COMMANDS: readonly Command[] = [
+  createCommand,
+  initCommand,
+  removeCommand,
+  pruneCommand,
+  lsCommand,
+  pathCommand,
+  hookCommand,
+];
