@@ -1,6 +1,10 @@
 # agent-worktrees
 
-One task, one worktree, set up and torn down by the project's own scripts when it has them. The `cniska-worktrees` Claude Code plugin tells every session to create and remove worktrees with the CLI. [`docs/design.md`](docs/design.md) has the design.
+Task worktrees for coding agents: one task, one checkout, set up and torn down by the project's own scripts.
+
+- `agent-worktrees create <name>` makes a git worktree at `.claude/worktrees/<name>`, runs the project's setup script in it, and prints its path.
+- `agent-worktrees remove <name>` runs the project's teardown script and removes the worktree, keeping the branch.
+- The `cniska-worktrees` Claude Code plugin sends Claude Code's own worktrees through the same commands.
 
 ## Install
 
@@ -20,9 +24,26 @@ Then install the Claude Code plugin:
 claude plugin install cniska-worktrees@cniska
 ```
 
+## Why
+
+Two agents in one checkout overwrite each other's files, so parallel work needs a checkout per task. A bare `git worktree add` gives a checkout that is not ready to work in: no dependencies installed, no local config, nothing the project's tooling expects. When the work is done, whatever the worktree started outside its directory, such as a database or a simulator, is left running.
+
+Claude Code makes worktrees of its own, for EnterWorktree and for subagents with worktree isolation, and does not run the project's own setup for them. It also repoints git's shared `core.hooksPath` when it does, so a `post-checkout` hook is not a reliable place for setup either. agent-worktrees owns the whole lifecycle instead: it creates the worktree, runs the project's setup, records whether setup finished, and runs the teardown before the worktree goes.
+
 ## Project contract
 
-Any git repository works as it is. A project whose worktrees need more than a checkout adds one or both of two scripts. `scripts/worktree-setup.sh` makes a checkout ready to work in; it runs in that checkout. `scripts/worktree-teardown.sh` releases what a worktree owns outside its directory; it runs in the primary checkout and works from the name alone, since the worktree may already be gone. Both get `WORKTREE_PATH` and `WORKTREE_PRIMARY`, and `WORKTREE_NAME` for a task worktree, unset for the primary. Both rerun on every resume and retry, so each has to be idempotent. The tool never reads their output. A script that exists but is not executable is refused, never skipped. `create` on an existing branch checks that branch out and runs the setup script as that branch has it.
+Any git repository works as it is. A project whose worktrees need more than a checkout adds one or both of two scripts:
+
+- `scripts/worktree-setup.sh` makes a checkout ready to work in. It runs in that checkout.
+- `scripts/worktree-teardown.sh` releases what a worktree owns outside its directory. It runs in the primary checkout and works from the name alone, since the worktree may already be gone.
+
+Both scripts:
+
+- get `WORKTREE_PATH` and `WORKTREE_PRIMARY`, and `WORKTREE_NAME` for a task worktree (unset for the primary);
+- rerun on every resume and retry, so each has to be idempotent;
+- must be executable when they exist, or the command refuses rather than skipping them.
+
+The tool never reads their output. `create` on an existing branch checks that branch out and runs the setup script as that branch has it.
 
 ## Commands
 
@@ -40,8 +61,13 @@ Results go to stdout. A refusal goes to stderr with the act that resolves it, an
 
 ## Claude Code plugin
 
-The `cniska-worktrees` plugin, in the `cniska` marketplace, adds a short note, `plugin/hooks/note.md`, whenever a session starts, resumes, clears or compacts. The note tells the agent to create a worktree with `create` and remove it with `remove`. Its `WorktreeCreate` and `WorktreeRemove` hooks send Claude Code's own worktrees, from EnterWorktree and a subagent's worktree isolation, through the same commands. The plugin requires the CLI on `PATH` and brings neither Bun nor the CLI, so install the CLI first.
+The `cniska-worktrees` plugin, in the `cniska` marketplace, does two things:
+
+- Whenever a session starts, resumes, clears or compacts, it adds a short note, `plugin/hooks/note.md`, telling the agent to create worktrees with `create` and remove them with `remove`.
+- Its `WorktreeCreate` and `WorktreeRemove` hooks send EnterWorktree and a subagent's worktree isolation through the same commands.
+
+The plugin brings neither Bun nor the CLI. Install the CLI first: with the plugin installed and no CLI on `PATH`, every Claude Code worktree fails to create.
 
 ## Development
 
-`bun run check` runs the lint, the typecheck and the tests. [`AGENTS.md`](AGENTS.md) holds the repository's rules. The plugin lives in `plugin/`, apart from the repository root, so the CLI's `bin/` stays off the `PATH` Claude Code gives a plugin.
+`bun run check` runs the lint, the typecheck and the tests. [`AGENTS.md`](AGENTS.md) holds the repository's rules, and [`docs/design.md`](docs/design.md) the design and the facts about Claude Code it rests on. The plugin lives in `plugin/`, apart from the repository root, so the CLI's `bin/` stays off the `PATH` Claude Code gives a plugin.
