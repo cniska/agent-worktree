@@ -204,8 +204,9 @@ function removable(project: Project, name: WorktreeName): Worktree {
   const state = stateAt(project, name);
   switch (state.kind) {
     case "absent":
-    case "unmanaged":
       throw refuse("not_registered", { name, path });
+    case "unmanaged":
+      throw refuse("unmanaged", { path });
     case "orphaned":
       throw refuse("orphaned", { name });
     case "unlisted":

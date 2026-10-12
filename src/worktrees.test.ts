@@ -209,7 +209,7 @@ describe("remove", () => {
       const path = create(f.project, f.name("task-a"));
       const stray = f.path("Task-A");
       mkdirSync(stray);
-      expect(refusal(() => remove(f.project, f.name("Task-A"), true)).code).toBe("not_registered");
+      expect(refusal(() => remove(f.project, f.name("Task-A"), true)).code).toBe("unmanaged");
       expect(remove(f.project, f.name("task-a"), false).path).toBe(path);
       expect(existsSync(path)).toBe(false);
       expect(list(f.project)).toEqual([
@@ -217,6 +217,20 @@ describe("remove", () => {
       ]);
     },
   );
+
+  test("refuses a git worktree it did not create with the act that removes it, and leaves it in place", () => {
+    const f = fixture({ teardown: TOUCH_TEARDOWN_RECORD });
+    const path = f.path("task-plain");
+    git(f.dir, ["worktree", "add", "-q", path, "-b", "task-plain"]);
+    const refused = refusal(() => remove(f.project, f.name("task-plain"), true));
+    expect(refused.code).toBe("unmanaged");
+    expect(refused.resolve).toBe(
+      `remove it yourself, with git worktree remove ${path} when git lists it, or pick another name`,
+    );
+    expect(existsSync(path)).toBe(true);
+    expect(existsSync(f.teardownRecord)).toBe(false);
+    expect(stateKind(f, "task-plain")).toBe("unmanaged");
+  });
 
   test("removes the worktree, keeps the branch, and returns the worktree it had", () => {
     const f = fixture();
