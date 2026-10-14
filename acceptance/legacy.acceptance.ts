@@ -77,7 +77,10 @@ test("AC-22 the keep and drop acts converge a worktree in the earlier location",
   const deleted = earlier(w, p, "task-c");
   rmSync(deleted, { recursive: true });
   expect(succeeded(run(w, p.dir, ["prune"]))).toEqual([]);
-  expect(recorded(record).at(-1)).toEqual({ name: "task-c", path: deleted, primary: p.dir, cwd: p.dir });
+  expect(recorded(record)).toEqual([
+    { name: "task-b", path: "unset", primary: p.dir, cwd: p.dir },
+    { name: "task-c", path: deleted, primary: p.dir, cwd: p.dir },
+  ]);
   expect(ls(w, p.dir).map(({ name }) => name)).toEqual(["task-a"]);
 });
 

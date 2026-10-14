@@ -82,12 +82,10 @@ test("AC-6 create makes the worktree on its branch, sets it up once, and lists i
   expect(succeeded(run(w, p.dir, ["create", "task-b"]))).toEqual([p.path("task-b")]);
   expect(git(w, p.path("task-b"), ["branch", "--show-current"])).toBe("task-b");
   expect(git(w, p.path("task-b"), ["rev-parse", "HEAD"])).toBe(branched);
-  expect(recorded(record).at(-1)).toEqual({
-    name: "task-b",
-    path: p.path("task-b"),
-    primary: p.dir,
-    cwd: p.path("task-b"),
-  });
+  expect(recorded(record)).toEqual([
+    { name: "task-a", path, primary: p.dir, cwd: path },
+    { name: "task-b", path: p.path("task-b"), primary: p.dir, cwd: p.path("task-b") },
+  ]);
   expect(ls(w, p.dir)).toEqual([
     { name: "task-a", state: "ready", branch: "task-a", path },
     { name: "task-b", state: "ready", branch: "task-b", path: p.path("task-b") },
@@ -175,7 +173,10 @@ test("AC-9 init sets up the primary, a pending task worktree, and refuses any ot
   expect(ls(w, p.dir)).toEqual([{ name: "task-a", state: "setup pending", branch: "task-a", path }]);
   writeFileSync(fixed, "");
   expect(succeeded(run(w, path, ["init"]))).toEqual([]);
-  expect(recorded(record).at(-1)).toEqual({ name: "task-a", path, primary: p.dir, cwd: path });
+  expect(recorded(record)).toEqual([
+    { name: "unset", path: p.dir, primary: p.dir, cwd: p.dir },
+    { name: "task-a", path, primary: p.dir, cwd: path },
+  ]);
   expect(ls(w, p.dir)).toEqual([{ name: "task-a", state: "ready", branch: "task-a", path }]);
   const other = p.path("other");
   git(w, p.dir, ["worktree", "add", "-q", other, "-b", "other"]);
