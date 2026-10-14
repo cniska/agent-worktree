@@ -1,6 +1,15 @@
 import { expect } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -80,6 +89,41 @@ export function repo(w: World, at = join(w.root, "clones", "repo")): string {
   return at;
 }
 
+export type ScriptName = "worktree-setup.sh" | "worktree-teardown.sh";
+
+export function script(w: World, checkout: string, name: ScriptName, body: string): void {
+  const path = join(checkout, "scripts", name);
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, `#!/bin/sh\n${body}\n`);
+  chmodSync(path, 0o755);
+  git(w, checkout, ["add", `scripts/${name}`]);
+  git(w, checkout, ["commit", "-q", "-m", name]);
+}
+
+export function recording(record: string): string {
+  return `printf '%s\\t%s\\t%s\\t%s\\n' "\${WORKTREE_NAME-unset}" "\${WORKTREE_PATH-unset}" "$WORKTREE_PRIMARY" "$(pwd -P)" >> "${record}"`;
+}
+
+export type Recorded = {
+  readonly name: string;
+  readonly path: string;
+  readonly primary: string;
+  readonly cwd: string;
+};
+
+export function recorded(record: string): readonly Recorded[] {
+  if (!existsSync(record)) return [];
+  return readFileSync(record, "utf8")
+    .split("\n")
+    .slice(0, -1)
+    .map((line) => {
+      const fields = line.split("\t");
+      expect(fields).toHaveLength(4);
+      const [name = "", path = "", primary = "", cwd = ""] = fields;
+      return { name, path, primary, cwd };
+    });
+}
+
 export function keyOf(w: World, path: string): string {
   expect(dirname(dirname(path))).toBe(w.data);
   return dirname(path).slice(w.data.length + 1);
@@ -100,6 +144,19 @@ export function succeeded(ran: Ran): readonly string[] {
   expect({ exitCode: ran.exitCode, stderr: ran.stderr }).toMatchObject({ exitCode: 0 });
   expect(ran.stdout).toMatch(ONE_LINE_EACH);
   return ran.stdout.split("\n").slice(0, -1);
+}
+
+export type Refusal = { readonly message: string; readonly act: string };
+
+const REFUSAL_TAIL = /(?:^|\n)agent-worktree(?: ([a-z]+))?: ([^\n]+)\n {2}([^\n]+)\n$/;
+
+export function refused(ran: Ran, command: string): Refusal {
+  expect({ exitCode: ran.exitCode, stdout: ran.stdout }).toEqual({ exitCode: 1, stdout: "" });
+  const match = REFUSAL_TAIL.exec(ran.stderr);
+  expect({ stderr: ran.stderr, refusal: match !== null }).toMatchObject({ refusal: true });
+  const [, named, message = "", act = ""] = match ?? [];
+  expect(named).toBe(command);
+  return { message, act };
 }
 
 const STATES = [

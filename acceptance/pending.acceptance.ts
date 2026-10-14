@@ -1,10 +1,5 @@
 import { test } from "bun:test";
 
-test.todo("AC-5 create refuses each invalid name, a case collision, an unsupported layout and a non-checkout", () => {});
-test.todo("AC-6 create makes the worktree on its branch, sets it up once, and lists it ready", () => {});
-test.todo("AC-7 a failed setup leaves the worktree pending, and the rerun resumes it", () => {});
-test.todo("AC-8 create and remove refuse unmanaged, orphaned and unlisted worktrees until their act is done", () => {});
-test.todo("AC-9 init sets up the primary, a pending task worktree, and refuses any other checkout", () => {});
 test.todo("AC-10 remove tears down in the primary, removes the worktree and keeps its branch", () => {});
 test.todo("AC-11 remove refuses dirty and submodule worktrees without force, and locked ones always", () => {});
 test.todo("AC-12 a failed teardown keeps the worktree, force removes it, and prune finishes it", () => {});
