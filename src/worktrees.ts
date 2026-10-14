@@ -113,14 +113,20 @@ const refuse = refuser<{
   },
 });
 
-function goneState(
-  project: Project,
-  name: WorktreeName,
-  worktree: Worktree | null,
-  listed: ReadonlyMap<string, Worktree>,
-): Registered {
-  const legacy = listed.get(legacyPath(project, name));
-  if (legacy !== undefined) return { kind: "legacy", name, worktree: legacy };
+type Listing = ReadonlyMap<string, Worktree>;
+
+function listing(project: Project): Listing {
+  return new Map(worktrees(project.primary).map((tree) => [tree.path, tree]));
+}
+
+function lastListed(project: Project, name: WorktreeName, listed: Listing): Worktree | null {
+  return listed.get(worktreePath(project, name)) ?? listed.get(legacyPath(project, name)) ?? null;
+}
+
+function goneState(project: Project, name: WorktreeName, listed: Listing): Registered {
+  const worktree = lastListed(project, name, listed);
+  if (worktree !== null && worktree.path !== worktreePath(project, name))
+    return { kind: "legacy", name, worktree };
   return { kind: "orphaned", name, worktree };
 }
 
@@ -129,10 +135,10 @@ function registeredState(
   registered: Entry,
   present: boolean,
   worktree: Worktree | null,
-  listed: ReadonlyMap<string, Worktree>,
+  listed: Listing,
 ): Registered {
   const { name } = registered;
-  if (!present) return goneState(project, name, worktree, listed);
+  if (!present) return goneState(project, name, listed);
   if (worktree === null) return { kind: "unlisted", name };
   return { kind: registered.ready ? "ready" : "pending", name, worktree };
 }
@@ -140,14 +146,14 @@ function registeredState(
 type Snapshot = {
   readonly found: readonly Dirent[];
   readonly entries: readonly Entry[];
-  readonly listed: ReadonlyMap<string, Worktree>;
+  readonly listed: Listing;
 };
 
 function snapshot(project: Project): Snapshot {
   return {
     found: directoryEntries(worktreesDir(project)),
     entries: entries(project),
-    listed: new Map(worktrees(project.primary).map((tree) => [tree.path, tree])),
+    listed: listing(project),
   };
 }
 
@@ -262,17 +268,13 @@ export function remove(project: Project, name: WorktreeName, force: boolean): Wo
   return worktree;
 }
 
-function lastListedPath(project: Project, name: WorktreeName, listed: ReadonlySet<string>): string | null {
-  return [worktreePath(project, name), legacyPath(project, name)].find((path) => listed.has(path)) ?? null;
-}
-
 export function prune(project: Project): void {
-  const listed = new Set(worktrees(project.primary).map((tree) => tree.path));
+  const before = listing(project);
   pruneWorktrees(project.primary);
   const failed: string[] = [];
   for (const { state } of list(project)) {
     if (state.kind !== "orphaned") continue;
-    const path = lastListedPath(project, state.name, listed);
+    const path = lastListed(project, state.name, before)?.path ?? null;
     if (tearDown(project, state.name, path) === null) unregister(project, state.name);
     else failed.push(state.name);
   }
