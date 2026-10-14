@@ -10,3 +10,4 @@ Owns the lifecycle of a task checkout: a git worktree a project's own scripts se
 - Fix the cause, never work around it, and add no debt. Debt you find is fixed where it is found.
 - Code carries no comments, tool contracts aside. A why goes into a name, a test, or the README.
 - Commit directly to `main`, in Conventional Commits.
+- Push each commit to `main` once `bun run check` passes and a fresh reviewer accepts it; that accept is the owner's standing sign-off, so no push waits on them.
