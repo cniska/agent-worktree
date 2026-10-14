@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import {
   git,
   hookEvent,
+  type Listed,
   ls,
   type Project,
   project,
@@ -35,9 +36,10 @@ test("AC-21 a worktree in the earlier location is listed as legacy and refused b
   script(w, p.dir, "worktree-teardown.sh", recording(record));
   const old = earlier(w, p, "task-a");
   const target = p.path("task-a");
-  expect(ls(w, p.dir)).toEqual([
+  const listed: readonly Listed[] = [
     { name: "task-a", state: "legacy (move or drop)", branch: "task-a", path: old },
-  ]);
+  ];
+  expect(ls(w, p.dir)).toEqual(listed);
   const legacy = {
     message: `task-a is at ${old}, inside the primary checkout, where agent-worktree no longer keeps worktrees`,
     act: `keep it with mkdir -p ${dirname(target)} && git worktree move ${old} ${target}, then agent-worktree init in ${target}; or drop it with git worktree remove ${old}, then agent-worktree prune`,
@@ -51,9 +53,7 @@ test("AC-21 a worktree in the earlier location is listed as legacy and refused b
   expect(existsSync(old)).toBe(true);
   expect(succeeded(run(w, p.dir, ["prune"]))).toEqual([]);
   expect(recorded(record)).toEqual([]);
-  expect(ls(w, p.dir)).toEqual([
-    { name: "task-a", state: "legacy (move or drop)", branch: "task-a", path: old },
-  ]);
+  expect(ls(w, p.dir)).toEqual(listed);
 });
 
 test("AC-22 the keep and drop acts converge a worktree in the earlier location", () => {
