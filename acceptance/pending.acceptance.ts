@@ -1,11 +1,5 @@
 import { test } from "bun:test";
 
-test.todo("AC-10 remove tears down in the primary, removes the worktree and keeps its branch", () => {});
-test.todo("AC-11 remove refuses dirty and submodule worktrees without force, and locked ones always", () => {});
-test.todo("AC-12 a failed teardown keeps the worktree, force removes it, and prune finishes it", () => {});
-test.todo("AC-13 remove refuses a name that is not registered", () => {});
-test.todo("AC-14 prune names the worktrees whose teardown failed and unregisters the rest", () => {});
-test.todo("AC-15 ls lists every worktree sorted by name, or notes there are none", () => {});
 test.todo("AC-16 a non-executable or unrunnable script is refused, and a project without scripts works", () => {});
 test.todo("AC-17 a setup script's stdout stays off the CLI's stdout", () => {});
 test.todo("AC-18 hook creates on WorktreeCreate and force-removes on WorktreeRemove", () => {});
