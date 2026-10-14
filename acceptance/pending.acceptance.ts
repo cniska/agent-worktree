@@ -1,10 +1,5 @@
 import { test } from "bun:test";
 
-test.todo("AC-16 a non-executable or unrunnable script is refused, and a project without scripts works", () => {});
-test.todo("AC-17 a setup script's stdout stays off the CLI's stdout", () => {});
-test.todo("AC-18 hook creates on WorktreeCreate and force-removes on WorktreeRemove", () => {});
-test.todo("AC-19 hook refuses a foreign path, a nested name, another event and stdin that is not JSON", () => {});
-test.todo("AC-20 the plugin runs hook for both events and the note on the four session sources", () => {});
 test.todo("AC-21 a worktree in the earlier location is listed as legacy and refused by every command", () => {});
 test.todo("AC-22 the keep and drop acts converge a worktree in the earlier location", () => {});
 test.todo("AC-23 an unregistered directory in the earlier location is not agent-worktree's", () => {});

@@ -59,19 +59,36 @@ export function world(): World {
   };
 }
 
-export function run(
-  w: World,
-  cwd: string,
-  args: readonly string[],
-  { env, unset }: { env?: Env; unset?: readonly string[] } = {},
-): Ran {
+type RunOptions = { readonly stdin?: string; readonly env?: Env; readonly unset?: readonly string[] };
+
+function spawn(w: World, cwd: string, argv: readonly string[], { stdin, env, unset }: RunOptions): Ran {
+  const [program = "", ...args] = argv;
   const merged = Object.entries({ ...w.env, ...env }).filter(([name]) => !unset?.includes(name));
-  const ran = spawnSync(process.execPath, [ENTRY, ...args], {
+  const ran = spawnSync(program, args, {
     cwd,
+    input: stdin ?? "",
     encoding: "utf8",
     env: Object.fromEntries(merged),
   });
   return { exitCode: ran.status ?? -1, stdout: ran.stdout, stderr: ran.stderr };
+}
+
+export function run(w: World, cwd: string, args: readonly string[], options: RunOptions = {}): Ran {
+  return spawn(w, cwd, [process.execPath, ENTRY, ...args], options);
+}
+
+const PLUGIN = join(import.meta.dir, "..", "plugin");
+
+export function pluginCommand(w: World, cwd: string, command: string, stdin = ""): Ran {
+  const bin = join(w.root, "bin");
+  mkdirSync(bin, { recursive: true });
+  const cli = join(bin, "agent-worktree");
+  writeFileSync(cli, `#!/bin/sh\nexec "${process.execPath}" "${ENTRY}" "$@"\n`);
+  chmodSync(cli, 0o755);
+  return spawn(w, cwd, ["/bin/sh", "-c", command], {
+    stdin,
+    env: { PATH: `${bin}:${w.env.PATH}`, CLAUDE_PLUGIN_ROOT: PLUGIN },
+  });
 }
 
 export function git(w: World, cwd: string, args: readonly string[]): string {
@@ -186,5 +203,14 @@ export function ls(w: World, dir: string): readonly Listed[] {
     const [name = "", state = "", branch = "", path = ""] = fields;
     if (!isState(state)) throw new Error(`${state} is not a state ls prints`);
     return { name, state, branch, path };
+  });
+}
+
+export function hookEvent(fields: Readonly<Record<string, string>>): string {
+  return JSON.stringify({
+    session_id: "00000000-0000-0000-0000-000000000000",
+    transcript_path: "/transcripts/session.jsonl",
+    cwd: "/checkout",
+    ...fields,
   });
 }
