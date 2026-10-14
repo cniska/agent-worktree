@@ -59,10 +59,12 @@ export function world(): World {
   };
 }
 
+const OFFLINE = ["/usr/bin/sandbox-exec", "-p", "(version 1)(allow default)(deny network*)"];
+
 type RunOptions = { readonly stdin?: string; readonly env?: Env; readonly unset?: readonly string[] };
 
 function spawn(w: World, cwd: string, argv: readonly string[], { stdin, env, unset }: RunOptions): Ran {
-  const [program = "", ...args] = argv;
+  const [program = "", ...args] = [...OFFLINE, ...argv];
   const merged = Object.entries({ ...w.env, ...env }).filter(([name]) => !unset?.includes(name));
   const ran = spawnSync(program, args, {
     cwd,
@@ -167,13 +169,21 @@ export type Refusal = { readonly message: string; readonly act: string };
 
 const REFUSAL_TAIL = /(?:^|\n)agent-worktree(?: ([a-z]+))?: ([^\n]+)\n {2}([^\n]+)\n$/;
 
-export function refused(ran: Ran, command: string): Refusal {
-  expect({ exitCode: ran.exitCode, stdout: ran.stdout }).toEqual({ exitCode: 1, stdout: "" });
+function refusalOf(ran: Ran, exitCode: number, command: string | null): Refusal {
+  expect({ exitCode: ran.exitCode, stdout: ran.stdout }).toEqual({ exitCode, stdout: "" });
   const match = REFUSAL_TAIL.exec(ran.stderr);
   expect({ stderr: ran.stderr, refusal: match !== null }).toMatchObject({ refusal: true });
   const [, named, message = "", act = ""] = match ?? [];
-  expect(named).toBe(command);
+  expect(named ?? null).toBe(command);
   return { message, act };
+}
+
+export function refused(ran: Ran, command: string): Refusal {
+  return refusalOf(ran, 1, command);
+}
+
+export function usageRefused(ran: Ran, command: string | null): Refusal {
+  return refusalOf(ran, 2, command);
 }
 
 const STATES = [
