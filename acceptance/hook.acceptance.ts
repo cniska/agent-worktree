@@ -128,4 +128,5 @@ test("AC-20 the plugin runs hook for both events and the note on the four sessio
     stderr: "",
   });
   expect(note.stdout).toContain("agent-worktree create <name>");
+  expect(note.stdout).toContain("agent-worktree remove <name>");
 });
