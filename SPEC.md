@@ -69,7 +69,7 @@ Two agents in one checkout overwrite each other's files, so parallel work needs 
 ### 2.8 Project scripts
 
 - **FR-32** — A project needs no script. `scripts/worktree-setup.sh` runs in the checkout being set up, as that checkout has it; `scripts/worktree-teardown.sh` runs in the primary checkout, since the worktree may already be gone.
-- **FR-33** — Both scripts get `WORKTREE_PRIMARY`, `WORKTREE_PATH` and, for a task worktree, `WORKTREE_NAME`. `WORKTREE_PATH` is where the worktree actually is, or where git last listed it when the command started; for a worktree git no longer lists, such as one dropped with `git worktree remove`, it is unset. For the primary, `WORKTREE_NAME` is unset. A variable left unset stays unset even when the caller's environment set it.
+- **FR-33** — Both scripts get `WORKTREE_PRIMARY`, `WORKTREE_PATH` and, for a task worktree, `WORKTREE_NAME`. `WORKTREE_PATH` is where the worktree actually is, or where git last listed it when the command started; for a worktree git no longer lists, such as one dropped with `git worktree remove`, it is unset. For the primary, `WORKTREE_NAME` is unset. A variable left unset stays unset even when the caller's environment set it. Beyond these variables, a script gets the caller's environment, with nothing of agent-worktree's own added, such as the Bun it runs on.
 - **FR-34** — A script that exists but is not executable is refused as `script_not_executable`, and one that cannot start as `script_unrunnable`; neither is skipped.
 - **FR-35** — A script's output goes to stderr and is never read; its exit status alone decides success.
 
@@ -143,6 +143,7 @@ Two agents in one checkout overwrite each other's files, so parallel work needs 
 - **AC-26** — Change state on disk between two commands, such as deleting a worktree's directory: the second command reads the change. (NF-1)
 - **AC-27** — The test environment's `HOME` and XDG directories are scratch directories, not the account's. (NF-3)
 - **AC-28** — The whole suite passes with the network unavailable. (NF-4)
+- **AC-29** — `create` through `bin/agent-worktree` with a setup script that records its `PATH`: the script sees the caller's `PATH`, with nothing of agent-worktree's own added. (FR-33)
 
 ## 6. Deliverables
 

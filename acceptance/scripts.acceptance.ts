@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
-import { chmodSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { git, project, refused, removeScratch, run, script, succeeded, world } from "./harness";
+import { git, launch, project, refused, removeScratch, run, script, succeeded, world } from "./harness";
 
 afterEach(removeScratch);
 
@@ -41,4 +41,13 @@ test("AC-17 a setup script's stdout stays off the CLI's stdout", () => {
   const ran = run(w, p.dir, ["create", "task-a"]);
   expect(succeeded(ran)).toEqual([p.path("task-a")]);
   expect(ran.stderr).toContain("installing dependencies\n");
+});
+
+test("AC-29 a script run through the launcher sees the caller's PATH", () => {
+  const w = world();
+  const p = project(w);
+  const record = join(w.root, "path.txt");
+  script(w, p.dir, "worktree-setup.sh", `printf '%s' "$PATH" > "${record}"`);
+  expect(succeeded(launch(w, p.dir, ["create", "task-a"]))).toEqual([p.path("task-a")]);
+  expect(readFileSync(record, "utf8")).toBe(`${join(w.root, "mise-bin")}:${w.env.PATH}`);
 });
