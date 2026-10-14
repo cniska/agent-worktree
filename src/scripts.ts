@@ -9,7 +9,11 @@ import type { WorktreeName } from "./project";
 export const SETUP = "scripts/worktree-setup.sh";
 export const TEARDOWN = "scripts/worktree-teardown.sh";
 
-type ScriptEnv = { readonly name: WorktreeName | null; readonly path: string; readonly primary: string };
+type ScriptEnv = {
+  readonly name: WorktreeName | null;
+  readonly path: string | null;
+  readonly primary: string;
+};
 
 const refuse = refuser<{
   readonly script_not_executable: { readonly script: string };
@@ -60,11 +64,12 @@ export function scriptIn(checkout: string, relative: typeof SETUP | typeof TEARD
 
 export function runScript(script: string, cwd: string, { name, path, primary }: ScriptEnv): Exit {
   note(`running ${script} in ${cwd}`);
-  const { WORKTREE_NAME: _inherited, ...env } = process.env;
+  const { WORKTREE_NAME: _name, WORKTREE_PATH: _path, ...env } = process.env;
   const named = name === null ? {} : { WORKTREE_NAME: name };
+  const located = path === null ? {} : { WORKTREE_PATH: path };
   const run = spawnSync(script, [], {
     cwd,
-    env: { ...env, ...named, WORKTREE_PATH: path, WORKTREE_PRIMARY: primary },
+    env: { ...env, ...named, ...located, WORKTREE_PRIMARY: primary },
     stdio: ["ignore", 2, 2],
   });
   if (run.error) throw refuse("script_unrunnable", { script, detail: run.error.message });

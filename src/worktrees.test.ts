@@ -560,12 +560,26 @@ describe("a worktree in the earlier location", () => {
     ]);
   });
 
-  test("is torn down and unregistered by prune once git removed it", () => {
-    const f = fixture({ teardown: TOUCH_TEARDOWN_RECORD });
+  test("is torn down with no path and unregistered by prune once git removed it", () => {
+    const f = fixture({ teardown: recording(TEARDOWN_RECORD) });
     const old = legacy(f, "task-a");
     git(f.dir, ["worktree", "remove", old]);
+    process.env.WORKTREE_PATH = "/inherited";
+    try {
+      prune(f.project);
+    } finally {
+      delete process.env.WORKTREE_PATH;
+    }
+    expect(recorded(f.teardownRecord)).toEqual(["task-a", "unset", f.dir, f.dir]);
+    expect(list(f.project)).toEqual([]);
+  });
+
+  test("is torn down where git last listed it once its directory was deleted", () => {
+    const f = fixture({ teardown: recording(TEARDOWN_RECORD) });
+    const old = legacy(f, "task-a");
+    rmSync(old, { recursive: true });
     prune(f.project);
-    expect(existsSync(f.teardownRecord)).toBe(true);
+    expect(recorded(f.teardownRecord)).toEqual(["task-a", old, f.dir, f.dir]);
     expect(list(f.project)).toEqual([]);
   });
 

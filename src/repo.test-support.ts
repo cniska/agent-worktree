@@ -57,7 +57,7 @@ export const SETUP_RECORD = `$WORKTREE_PRIMARY/../${RECORD.setup}`;
 export const TEARDOWN_RECORD = `$WORKTREE_PRIMARY/../${RECORD.teardown}`;
 
 export function recording(record: string): string {
-  return `printf '%s\\n' "\${WORKTREE_NAME-unset}" "$WORKTREE_PATH" "$WORKTREE_PRIMARY" "$(pwd -P)" > "${record}"`;
+  return `printf '%s\\n' "\${WORKTREE_NAME-unset}" "\${WORKTREE_PATH-unset}" "$WORKTREE_PRIMARY" "$(pwd -P)" > "${record}"`;
 }
 
 export function recorded(path: string): readonly string[] {

@@ -69,7 +69,7 @@ Two agents in one checkout overwrite each other's files, so parallel work needs 
 ### 2.8 Project scripts
 
 - **FR-32** — A project needs no script. `scripts/worktree-setup.sh` runs in the checkout being set up, as that checkout has it; `scripts/worktree-teardown.sh` runs in the primary checkout, since the worktree may already be gone.
-- **FR-33** — Both scripts get `WORKTREE_PATH` and `WORKTREE_PRIMARY`, and `WORKTREE_NAME` for a task worktree; for the primary, `WORKTREE_NAME` is unset even when the caller's environment set it.
+- **FR-33** — Both scripts get `WORKTREE_PRIMARY`, `WORKTREE_PATH` and, for a task worktree, `WORKTREE_NAME`. `WORKTREE_PATH` is where the worktree actually is, or where git last listed it when the command started; for a worktree git no longer lists, such as one dropped with `git worktree remove`, it is unset. For the primary, `WORKTREE_NAME` is unset. A variable left unset stays unset even when the caller's environment set it.
 - **FR-34** — A script that exists but is not executable is refused as `script_not_executable`, and one that cannot start as `script_unrunnable`; neither is skipped.
 - **FR-35** — A script's output goes to stderr and is never read; its exit status alone decides success.
 
@@ -135,7 +135,7 @@ Two agents in one checkout overwrite each other's files, so parallel work needs 
 - **AC-19** — `hook` with a foreign path, a nested name, another event and non-JSON stdin: `foreign_path`, `invalid_name`, `hook_event`, `hook_input`. (FR-38, FR-39)
 - **AC-20** — The plugin's hooks file runs `agent-worktree hook` for both events and the note on the four session sources. (FR-40)
 - **AC-21** — A registered worktree git lists under `<primary>/.claude/worktrees`: `ls` lists it there as `legacy`; `create`, `init`, `remove` and the `WorktreeRemove` hook each meet `legacy_location`; `prune` runs no teardown for it and leaves it registered. (FR-41, FR-42, FR-43)
-- **AC-22** — Do the keep act on it: `ls` reads it `ready` at its FR-1 path. Do the drop act on another: teardown ran and `ls` no longer lists it. (FR-44, NF-2)
+- **AC-22** — Do the keep act on it: `ls` reads it `ready` at its FR-1 path. Do the drop act on another: teardown ran with `WORKTREE_PATH` unset even when inherited, and `ls` no longer lists it; delete a third's directory and prune: teardown ran with its earlier path. (FR-33, FR-44, NF-2)
 - **AC-23** — An unregistered directory under `<primary>/.claude/worktrees`: absent from `ls`, untouched by `prune`. (FR-45)
 - **AC-24** — The CLI with a result, a refusal, an unknown command, an unknown option and too many arguments: exit 0 with stdout; exit 1 with the two-line refusal; exit 2 with the usage as the act. (FR-46, FR-47, FR-48, FR-50)
 - **AC-25** — The CLI with no command, `--help` and `remove --help`: every command's usage and summary, or the one. (FR-49)

@@ -187,14 +187,10 @@ function setUp(project: Project, name: WorktreeName | null, checkout: string): v
   if (name !== null) markReady(project, name);
 }
 
-function tearDown(project: Project, name: WorktreeName): Exit | null {
+function tearDown(project: Project, name: WorktreeName, path: string | null): Exit | null {
   const script = scriptIn(project.primary, TEARDOWN);
   if (script === null) return null;
-  const exit = runScript(script, project.primary, {
-    name,
-    path: worktreePath(project, name),
-    primary: project.primary,
-  });
+  const exit = runScript(script, project.primary, { name, path, primary: project.primary });
   return succeeded(exit) ? null : exit;
 }
 
@@ -259,19 +255,25 @@ export function remove(project: Project, name: WorktreeName, force: boolean): Wo
   if (worktree.locked) throw refuse("locked", { name, path: worktree.path });
   if (!force && hasSubmodules(worktree.path)) throw refuse("submodules", { name, path: worktree.path });
   if (!force && isDirty(worktree.path)) throw refuse("dirty", { name, path: worktree.path });
-  const failure = tearDown(project, name);
+  const failure = tearDown(project, name, worktree.path);
   if (failure !== null && !force) throw refuse("teardown_failed", { name, exit: failure });
   removeWorktree(project.primary, worktree.path, force);
   if (failure === null) unregister(project, name);
   return worktree;
 }
 
+function lastListedPath(project: Project, name: WorktreeName, listed: ReadonlySet<string>): string | null {
+  return [worktreePath(project, name), legacyPath(project, name)].find((path) => listed.has(path)) ?? null;
+}
+
 export function prune(project: Project): void {
+  const listed = new Set(worktrees(project.primary).map((tree) => tree.path));
   pruneWorktrees(project.primary);
   const failed: string[] = [];
   for (const { state } of list(project)) {
     if (state.kind !== "orphaned") continue;
-    if (tearDown(project, state.name) === null) unregister(project, state.name);
+    const path = lastListedPath(project, state.name, listed);
+    if (tearDown(project, state.name, path) === null) unregister(project, state.name);
     else failed.push(state.name);
   }
   if (failed.length > 0) throw refuse("teardowns_failed", { names: failed });
