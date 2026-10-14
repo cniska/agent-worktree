@@ -5,15 +5,17 @@ export const BUG =
 
 export class CodedError<Code extends string = string, Meta extends object = object> extends Error {
   override readonly name = "CodedError";
+  readonly code: Code;
+  readonly meta: Meta;
+  readonly resolve: string;
+  readonly kind: ErrorKind;
 
-  constructor(
-    readonly code: Code,
-    message: string,
-    readonly meta: Meta,
-    readonly resolve: string,
-    readonly kind: ErrorKind,
-  ) {
+  constructor(code: Code, message: string, meta: Meta, resolve: string, kind: ErrorKind) {
     super(message);
+    this.code = code;
+    this.meta = meta;
+    this.resolve = resolve;
+    this.kind = kind;
   }
 }
 

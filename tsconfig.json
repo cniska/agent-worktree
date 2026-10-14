@@ -4,15 +4,13 @@
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "moduleDetection": "force",
-    "resolveJsonModule": true,
-    "strict": true,
-    "skipLibCheck": true,
-    "esModuleInterop": true,
-    "forceConsistentCasingInFileNames": true,
     "verbatimModuleSyntax": true,
+    "erasableSyntaxOnly": true,
     "noUncheckedIndexedAccess": true,
-    "types": ["bun"],
-    "noEmit": true
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "types": ["bun"]
   },
   "include": ["src/**/*.ts"]
 }
