@@ -10,11 +10,8 @@ function homeDir(env: Env): string {
   return home !== undefined && home.trim() !== "" ? home : homedir();
 }
 
-function xdgBase(env: Env, variable: string, fallback: readonly string[]): string {
-  const value = env[variable];
-  return value !== undefined && isAbsolute(value) ? value : join(homeDir(env), ...fallback);
-}
-
 export function dataDir(env: Env = process.env): string {
-  return join(xdgBase(env, "XDG_DATA_HOME", [".local", "share"]), DATA_NAME);
+  const base = env.XDG_DATA_HOME;
+  if (base !== undefined && isAbsolute(base)) return join(base, DATA_NAME);
+  return join(homeDir(env), ".local", "share", DATA_NAME);
 }

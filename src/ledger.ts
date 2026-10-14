@@ -5,8 +5,10 @@ import { type Project, storedName, type WorktreeName } from "./project";
 
 export type Entry = { readonly name: WorktreeName; readonly ready: boolean };
 
+const LEDGER_DIR_OF_EARLIER_RELEASES = "agent-worktrees";
+
 function ledgerDir(project: Project): string {
-  return join(project.commonDir, "agent-worktrees");
+  return join(project.commonDir, LEDGER_DIR_OF_EARLIER_RELEASES);
 }
 
 function entryDir(project: Project, name: WorktreeName): string {

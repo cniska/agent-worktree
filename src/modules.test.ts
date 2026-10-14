@@ -112,6 +112,10 @@ const PROCESS_RUNNERS = new Set(["git", "scripts"]);
 
 const TEST_PROCESS_RUNNERS = new Set(["cli.test.ts", "repo.test-support.ts"]);
 
+const CLI_RUNNER = "cli.test.ts";
+
+const CLI_ENTRY_LITERAL = `"${ENTRY}.ts"`;
+
 const ERROR_CLASS = /Error$/;
 
 const CODED_ERROR = "CodedError";
@@ -232,16 +236,16 @@ function errorBreaches(file: string, text: string): readonly string[] {
   return [...nodesOf(text)].some(makesPlainError) ? [`${file} makes an error that is not coded`] : [];
 }
 
-function callsUnreachable(statement: Statement | undefined): boolean {
-  const call =
-    statement?.type === "ReturnStatement"
-      ? statement.argument
-      : statement?.type === "ExpressionStatement"
-        ? statement.expression
-        : null;
+function isUnreachableCall(node: Node | null | undefined): boolean {
   return (
-    call?.type === "CallExpression" && call.callee.type === "Identifier" && call.callee.name === UNREACHABLE
+    node?.type === "CallExpression" && node.callee.type === "Identifier" && node.callee.name === UNREACHABLE
   );
+}
+
+function callsUnreachable(statement: Statement | undefined): boolean {
+  if (statement?.type === "ReturnStatement") return isUnreachableCall(statement.argument);
+  if (statement?.type === "ExpressionStatement") return isUnreachableCall(statement.expression);
+  return false;
 }
 
 function endsInUnreachable(node: Node): boolean {
@@ -256,6 +260,11 @@ function switchBreaches(file: string, text: string): readonly string[] {
     : [`${file} has a switch that does not end in unreachable`];
 }
 
+function entryBreaches(file: string, text: string): readonly string[] {
+  if (file === CLI_RUNNER || !text.includes(CLI_ENTRY_LITERAL)) return [];
+  return [`${file} names ${CLI_ENTRY_LITERAL}, which only ${CLI_RUNNER} runs`];
+}
+
 describe("the modules", () => {
   test("another module or a test reaches a module only through its bare-named file, and never the entry", () => {
     expect(allSources().flatMap(({ file, text }) => boundaryBreaches(file, text))).toEqual([]);
@@ -263,6 +272,10 @@ describe("the modules", () => {
 
   test("only git and scripts start a process, and among the tests only cli.test.ts and the repo fixtures", () => {
     expect(allSources().flatMap(({ file, text }) => processBreaches(file, text))).toEqual([]);
+  });
+
+  test("only cli.test.ts names the entry file it runs", () => {
+    expect(allSources().flatMap(({ file, text }) => entryBreaches(file, text))).toEqual([]);
   });
 
   test("a module makes no error but a coded one", () => {
@@ -365,6 +378,15 @@ describe("the module checks", () => {
     ]) {
       expect(processBreaches("ledger.ts", text)).toEqual([]);
     }
+  });
+
+  test("catch the entry file named outside cli.test.ts", () => {
+    const text = `const CLI = resolve(import.meta.dir, ${CLI_ENTRY_LITERAL});`;
+    expect(entryBreaches("worktrees.test.ts", text)).toEqual([
+      `worktrees.test.ts names ${CLI_ENTRY_LITERAL}, which only cli.test.ts runs`,
+    ]);
+    expect(entryBreaches("cli.test.ts", text)).toEqual([]);
+    expect(entryBreaches("worktrees.test.ts", 'const runner = "cli.test.ts";')).toEqual([]);
   });
 
   test("catch an error that is not coded, however it is made", () => {
