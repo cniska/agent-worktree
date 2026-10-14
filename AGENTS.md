@@ -1,6 +1,6 @@
 # agent-worktree
 
-Owns the lifecycle of a task checkout: a git worktree a project's own scripts set up and tear down, which Claude Code reaches through the `cniska-worktree` plugin. [`README.md`](README.md) has the install, the project contract and the commands.
+Owns the lifecycle of a task checkout: a git worktree a project's own scripts set up and tear down, which Claude Code reaches through the `cniska-worktree` plugin. [`SPEC.md`](SPEC.md) states what must hold and is the source of truth; it changes in the same commit as the behavior it describes. [`README.md`](README.md) has the install and the commands.
 
 ## Rules
 

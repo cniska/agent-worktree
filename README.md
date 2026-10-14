@@ -32,18 +32,7 @@ Claude Code makes worktrees of its own, for EnterWorktree and for subagents with
 
 ## Project contract
 
-Any git repository works as it is. A project whose worktrees need more than a checkout adds one or both of two scripts:
-
-- `scripts/worktree-setup.sh` makes a checkout ready to work in. It runs in that checkout.
-- `scripts/worktree-teardown.sh` releases what a worktree owns outside its directory. It runs in the primary checkout and works from the name alone, since the worktree may already be gone.
-
-Both scripts:
-
-- get `WORKTREE_PATH` and `WORKTREE_PRIMARY`, and `WORKTREE_NAME` for a task worktree (unset for the primary);
-- rerun on every resume and retry, so each has to be idempotent;
-- must be executable when they exist, or the command refuses rather than skipping them.
-
-The tool never reads their output. `create` on an existing branch checks that branch out and runs the setup script as that branch has it.
+Any git repository works as it is. A project whose worktrees need more than a checkout adds `scripts/worktree-setup.sh`, `scripts/worktree-teardown.sh`, or both. [`SPEC.md`](SPEC.md) states what each gets and when it runs (§2.8), and everything else that must hold.
 
 ## Commands
 
