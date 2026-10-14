@@ -5,6 +5,8 @@ import { git, launch, project, refused, removeScratch, run, script, succeeded, w
 
 afterEach(removeScratch);
 
+const SET_BY_SH = new Set(["PWD", "SHLVL"]);
+
 test("AC-16 a non-executable or unrunnable script is refused, and a project without scripts works", () => {
   const w = world();
   const p = project(w);
@@ -43,11 +45,19 @@ test("AC-17 a setup script's stdout stays off the CLI's stdout", () => {
   expect(ran.stderr).toContain("installing dependencies\n");
 });
 
-test("AC-29 a script run through the launcher sees the caller's PATH", () => {
+test("AC-29 a script run through the launcher gets the caller's environment and the FR-33 variables", () => {
   const w = world();
   const p = project(w);
-  const record = join(w.root, "path.txt");
-  script(w, p.dir, "worktree-setup.sh", `printf '%s' "$PATH" > "${record}"`);
+  const record = join(w.root, "env.json");
+  const dump = `require("node:fs").writeFileSync(${JSON.stringify(record)}, JSON.stringify(process.env))`;
+  script(w, p.dir, "worktree-setup.sh", `exec "${process.execPath}" -e '${dump}'`);
   expect(succeeded(launch(w, p.dir, ["create", "task-a"]))).toEqual([p.path("task-a")]);
-  expect(readFileSync(record, "utf8")).toBe(`${join(w.root, "mise-bin")}:${w.env.PATH}`);
+  const received = Object.entries(JSON.parse(readFileSync(record, "utf8")));
+  expect(Object.fromEntries(received.filter(([name]) => !SET_BY_SH.has(name)))).toEqual({
+    ...w.env,
+    PATH: `${join(w.root, "mise-bin")}:${w.env.PATH}`,
+    WORKTREE_NAME: "task-a",
+    WORKTREE_PATH: p.path("task-a"),
+    WORKTREE_PRIMARY: p.dir,
+  });
 });

@@ -143,7 +143,7 @@ Two agents in one checkout overwrite each other's files, so parallel work needs 
 - **AC-26** — Change state on disk between two commands, such as deleting a worktree's directory: the second command reads the change. (NF-1)
 - **AC-27** — The test environment's `HOME` and XDG directories are scratch directories, not the account's. (NF-3)
 - **AC-28** — The whole suite passes with the network unavailable. (NF-4)
-- **AC-29** — `create` through `bin/agent-worktree` with a setup script that records its `PATH`: the script sees the caller's `PATH`, with nothing of agent-worktree's own added. (FR-33)
+- **AC-29** — `create` through `bin/agent-worktree` with a setup script that records its environment: the caller's environment and the FR-33 variables, nothing else. (FR-33)
 
 ## 6. Deliverables
 
