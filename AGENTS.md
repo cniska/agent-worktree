@@ -6,7 +6,7 @@ Owns the lifecycle of a task checkout: a git worktree a project's own scripts se
 
 ## Rules
 
-- `bun run check` is the check: lint, typecheck and tests. It passes before every commit.
+- `bun run check` is the check: lint, typecheck, knip (unused exports, files and dependencies) and tests. It passes before every commit.
 - The tests call the domain in process against throwaway git repos with fake scripts, assert on return values and refusal codes, and read state back with `list`. Among them only `src/cli.test.ts` spawns the CLI, and it pins only the wiring: usage, exit codes, the output format and one stdin round trip per hook event. Every refusal, resume, prune and both hook events have a test. Fixtures copy a format, never real data.
 - `bun run acceptance` proves SPEC.md's criteria: each test in `acceptance/*.acceptance.ts` drives the CLI alone in a scratch home and repo, and its name starts with the criteria it proves. `src/spec.test.ts`, part of the check, fails when a criterion has no test or todo, a test cites none, or a requirement no criterion cites.
 - A refusal is a coded error that names what was refused, its cause and the act that resolves it, and a rerun after that act converges. State is read from the ledger and the filesystem on every command, never remembered.
