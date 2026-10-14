@@ -99,7 +99,7 @@ Two agents in one checkout overwrite each other's files, so parallel work needs 
 
 ### 2.12 Port blocks
 
-- **FR-51** — Setting up a task worktree gives it the lowest free block of 10 consecutive ports from 24000 to 24999, each block starting at a multiple of 10, and records the block in the ledger; a block is never derived from a hash of the worktree's name or path. The primary checkout gets no block, so it keeps the project's default ports.
+- **FR-51** — Setting up a task worktree gives it the lowest free block of 10 consecutive ports from 24000 to 24999, each block starting at a multiple of 10, and records the block in the ledger; a block is never derived from a hash of the worktree's name or path. The primary checkout gets no block, so it keeps the project's default ports. Claiming a block notes `port block <first>-<last> for <name>` on stderr.
 - **FR-52** — A block is free when no worktree of any project on the machine holds it and none of its ports is bound on `127.0.0.1`, `0.0.0.0`, `::1` or `::`; a port another program binds skips its whole block. A worktree holds its block until it is unregistered or a `prune` finds its ledger entry gone (FR-58, FR-59).
 - **FR-53** — Two commands claiming at once never get the same block.
 - **FR-54** — With no free block, `create` and `init` are refused as `no_free_ports`, naming `remove` and `prune`; the worktree stays registered with setup pending and no block, and once a block is freed the next `create` or `init` claims one and resumes setup.
@@ -107,7 +107,7 @@ Two agents in one checkout overwrite each other's files, so parallel work needs 
 - **FR-56** — `WORKTREE_PORT` is the first port of the worktree's block, which runs to `WORKTREE_PORT` + 9.
 - **FR-57** — `ls` shows a worktree's block as `<first>-<last>`, or `-` when it holds none.
 - **FR-58** — `remove` frees the block when it unregisters the worktree; a worktree left registered after a failed teardown keeps its block, and its teardown during `prune` gets it.
-- **FR-59** — `prune` frees every block whose worktree's ledger entry is gone, in any project on the machine, such as one whose clone was deleted.
+- **FR-59** — `prune` frees every block whose worktree's ledger entry is gone, in any project on the machine, such as one whose clone was deleted, noting `port block <first>-<last> freed from <entry>, which is gone` on stderr for each.
 
 ## 3. Non-functional requirements
 
@@ -156,10 +156,10 @@ Two agents in one checkout overwrite each other's files, so parallel work needs 
 - **AC-27** — The test environment's `HOME` and XDG directories are scratch directories, not the account's. (NF-3)
 - **AC-28** — The whole suite passes with the network unavailable. (NF-4)
 - **AC-29** — `create` through `bin/agent-worktree` with a setup script that records its environment: the caller's environment and the FR-33 variables, nothing else. (FR-33)
-- **AC-30** — `create task-a` and `task-b`: setup gets the first two free blocks as `WORKTREE_PORT`, and `ls` shows each as `<first>-<last>`; `init` in the primary with `WORKTREE_PORT` inherited: setup gets it unset. (FR-33, FR-51, FR-56, FR-57)
+- **AC-30** — `create task-a` and `task-b`: setup gets the first two free blocks as `WORKTREE_PORT`, and `ls` shows each as `<first>-<last>`, and `create` notes the block it claims; `init` in the primary with `WORKTREE_PORT` inherited: setup gets it unset. (FR-33, FR-51, FR-56, FR-57)
 - **AC-31** — `remove task-a`: its teardown gets its block, and the next `create` gets that block again. (FR-51, FR-58)
 - **AC-32** — Hold one port of the lowest free block in another program, then `create`: the worktree gets the next block. (FR-52)
-- **AC-33** — A second clone creates a worktree in the same data directory: it gets the next block; delete the first clone and `prune` in the second: the next `create` there gets the first clone's block. (FR-52, FR-59)
+- **AC-33** — A second clone creates a worktree in the same data directory: it gets the next block; delete the first clone and `prune` in the second: it notes the block freed, and the next `create` there gets the first clone's block. (FR-52, FR-59)
 - **AC-34** — Several `create`s started at once: each worktree gets a different block. (FR-53)
 - **AC-35** — Hold a port in every free block, then `create`: `no_free_ports` with the worktree `setup pending` and no block; free them and rerun: setup gets the lowest block and it reads `ready`. (FR-54, NF-2)
 - **AC-36** — A registration with no block, written by hand: `ls` shows `-`; `init` in it: setup gets a block and `ls` shows it. (FR-55, FR-57)

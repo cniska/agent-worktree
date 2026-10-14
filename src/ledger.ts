@@ -11,8 +11,9 @@ import {
 import { dirname, join } from "node:path";
 import { refuser, systemErrorCode } from "./coded-error";
 import { directoryEntries } from "./directory";
+import { note } from "./log";
 import { dataDir } from "./paths";
-import { type Block, blocks, isBound, parseBlock, RANGE } from "./ports";
+import { type Block, blocks, blockText, isBound, parseBlock, RANGE } from "./ports";
 import { type Project, storedName, type WorktreeName } from "./project";
 
 export type Entry = { readonly name: WorktreeName; readonly ready: boolean; readonly block: Block | null };
@@ -136,7 +137,11 @@ export function claimBlock(project: Project, name: WorktreeName): Block {
     const taken = holderAt(claimFile(block));
     if (taken === holder) return block;
     if (taken !== null || isBound(block)) continue;
-    if (placeClaim(block, holder) || holderAt(claimFile(block)) === holder) return block;
+    if (placeClaim(block, holder)) {
+      note(`port block ${blockText(block)} for ${name}`);
+      return block;
+    }
+    if (holderAt(claimFile(block)) === holder) return block;
   }
   throw refuse("no_free_ports", { name });
 }
@@ -171,8 +176,16 @@ function freeStale(block: Block): void {
   const moved = setAside(block);
   if (moved === null) return;
   const holder = holderAt(moved);
-  if (holder !== null && existsSync(holder)) putBack(block, moved);
+  if (holder !== null) settle(block, moved, holder);
   rmSync(dirname(moved), { recursive: true, force: true });
+}
+
+function settle(block: Block, moved: string, holder: string): void {
+  if (existsSync(holder)) {
+    putBack(block, moved);
+    return;
+  }
+  note(`port block ${blockText(block)} freed from ${holder}, which is gone`);
 }
 
 export function freeStaleBlocks(): void {

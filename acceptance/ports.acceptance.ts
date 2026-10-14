@@ -29,7 +29,9 @@ test("AC-30 each worktree gets the lowest free block as WORKTREE_PORT, shown by 
   const record = join(w.root, "ports");
   script(w, p.dir, "worktree-setup.sh", portRecording(record));
   const [first, second] = freeBlocks();
-  succeeded(run(w, p.dir, ["create", "task-a"]));
+  const created = run(w, p.dir, ["create", "task-a"]);
+  succeeded(created);
+  expect(created.stderr).toContain(`agent-worktree: port block ${blockText(first)} for task-a\n`);
   succeeded(run(w, p.dir, ["create", "task-b"]));
   expect(portsRecorded(record)).toEqual([String(first), String(second)]);
   expect(lsPorts(w, p.dir)).toEqual({ "task-a": blockText(first), "task-b": blockText(second) });
@@ -68,7 +70,11 @@ test("AC-33 clones share the machine's blocks, and prune frees a deleted clone's
   succeeded(run(w, kept, ["create", "task-a"]));
   expect(lsPorts(w, kept)).toEqual({ "task-a": blockText(second) });
   rmSync(gone, { recursive: true, force: true });
-  succeeded(run(w, kept, ["prune"]));
+  const pruned = run(w, kept, ["prune"]);
+  succeeded(pruned);
+  expect(pruned.stderr).toContain(
+    `agent-worktree: port block ${blockText(first)} freed from ${join(gone, ".git", "agent-worktrees", "task-a")}, which is gone\n`,
+  );
   succeeded(run(w, kept, ["create", "task-b"]));
   expect(lsPorts(w, kept)).toEqual({ "task-a": blockText(second), "task-b": blockText(first) });
 });
