@@ -114,7 +114,7 @@ test("AC-35 with no free block create refuses and keeps setup pending, then resu
   expect(refused(ran, "create")).toEqual({
     message:
       "no port block from 24000 to 24999 is free for task-a: worktrees hold some and other programs listen on the rest; setup is pending",
-    act: "remove a worktree you are done with, or run agent-worktree prune to free the blocks of worktrees that are gone, then run the command again",
+    act: "remove a worktree you are done with, fix a teardown that failed for a worktree that is gone, or run agent-worktree prune in another clone whose gone worktrees hold blocks, then run the command again",
   });
   expect(ls(w, p.dir)).toEqual([
     { name: "task-a", state: "setup pending", branch: "task-a", path: p.path("task-a") },
@@ -159,4 +159,47 @@ test("AC-37 a worktree forced out past a failed teardown keeps its block until p
   expect(portsRecorded(record)).toEqual([String(first)]);
   succeeded(run(w, p.dir, ["create", "task-b"]));
   expect(lsPorts(w, p.dir)).toEqual({ "task-b": blockText(first) });
+});
+
+test("AC-38 create takes over the block of a worktree whose directory is gone, running its teardown first", async () => {
+  const w = world();
+  const p = project(w);
+  const record = join(w.root, "ports");
+  script(w, p.dir, "worktree-teardown.sh", portRecording(record));
+  const [first] = await freeBlocks();
+  succeeded(run(w, p.dir, ["create", "task-a"]));
+  rmSync(p.path("task-a"), { recursive: true, force: true });
+  const created = run(w, p.dir, ["create", "task-b"]);
+  succeeded(created);
+  expect(created.stderr).toContain(
+    `agent-worktree: port block ${blockText(first)} freed from task-a, whose worktree is gone\n`,
+  );
+  expect(portsRecorded(record)).toEqual([String(first)]);
+  expect(lsPorts(w, p.dir)).toEqual({ "task-b": blockText(first) });
+});
+
+test("AC-38 a gone worktree whose teardown fails keeps its block, and create takes the next", async () => {
+  const w = world();
+  const p = project(w);
+  script(w, p.dir, "worktree-teardown.sh", "exit 3");
+  const [first, second] = await freeBlocks();
+  succeeded(run(w, p.dir, ["create", "task-a"]));
+  rmSync(p.path("task-a"), { recursive: true, force: true });
+  succeeded(run(w, p.dir, ["create", "task-b"]));
+  expect(lsPorts(w, p.dir)).toEqual({ "task-a": blockText(first), "task-b": blockText(second) });
+});
+
+test("AC-39 create takes over a deleted clone's block without a prune", async () => {
+  const w = world();
+  const gone = repo(w, join(w.root, "clones", "gone"));
+  const kept = repo(w, join(w.root, "clones", "kept"));
+  const [first] = await freeBlocks();
+  succeeded(run(w, gone, ["create", "task-a"]));
+  rmSync(gone, { recursive: true, force: true });
+  const created = run(w, kept, ["create", "task-a"]);
+  succeeded(created);
+  expect(created.stderr).toContain(
+    `agent-worktree: port block ${blockText(first)} freed from ${join(gone, ".git", "agent-worktrees", "task-a")}, which is gone\n`,
+  );
+  expect(lsPorts(w, kept)).toEqual({ "task-a": blockText(first) });
 });

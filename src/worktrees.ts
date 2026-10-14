@@ -23,7 +23,8 @@ import {
   register,
   unregister,
 } from "./ledger";
-import type { Block } from "./ports";
+import { note } from "./log";
+import { type Block, blockText } from "./ports";
 import {
   isWorktreeName,
   legacyPath,
@@ -198,8 +199,22 @@ function legacyRefusal(project: Project, name: WorktreeName, worktree: Worktree)
   return refuse("legacy_location", { name, path: worktree.path, target: worktreePath(project, name) });
 }
 
+function reap(project: Project, name: WorktreeName, path: string | null): boolean {
+  if (tearDown(project, name, path) !== null) return false;
+  unregister(project, name);
+  return true;
+}
+
+function reapGone(project: Project, other: WorktreeName): boolean {
+  const state = stateAt(project, other);
+  if (state.kind !== "orphaned" || !reap(project, other, state.worktree?.path ?? null)) return false;
+  if (state.block !== null)
+    note(`port block ${blockText(state.block)} freed from ${other}, whose worktree is gone`);
+  return true;
+}
+
 async function setUp(project: Project, name: WorktreeName | null, checkout: string): Promise<void> {
-  const block = name === null ? null : await claimBlock(project, name);
+  const block = name === null ? null : await claimBlock(project, name, (other) => reapGone(project, other));
   const script = scriptIn(checkout, SETUP);
   if (script !== null) {
     const exit = runScript(script, checkout, { name, path: checkout, primary: project.primary, block });
@@ -291,8 +306,7 @@ export function prune(project: Project): void {
   for (const { state } of list(project)) {
     if (state.kind !== "orphaned") continue;
     const path = lastListed(project, state.name, before)?.path ?? null;
-    if (tearDown(project, state.name, path) === null) unregister(project, state.name);
-    else failed.push(state.name);
+    if (!reap(project, state.name, path)) failed.push(state.name);
   }
   freeStaleBlocks();
   if (failed.length > 0) throw refuse("teardowns_failed", { names: failed });

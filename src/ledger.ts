@@ -8,7 +8,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { refuser, systemErrorCode } from "./coded-error";
 import { directoryEntries } from "./directory";
 import { note } from "./log";
@@ -33,7 +33,7 @@ const refuse = refuser<{
     message: ({ name }) =>
       `no port block from ${RANGE} is free for ${name}: worktrees hold some and other programs listen on the rest; setup is pending`,
     resolve: () =>
-      "remove a worktree you are done with, or run agent-worktree prune to free the blocks of worktrees that are gone, then run the command again",
+      "remove a worktree you are done with, fix a teardown that failed for a worktree that is gone, or run agent-worktree prune in another clone whose gone worktrees hold blocks, then run the command again",
   },
 });
 
@@ -129,14 +129,26 @@ function placeClaim(block: Block, holder: string): boolean {
   }
 }
 
-export async function claimBlock(project: Project, name: WorktreeName): Promise<Block> {
+type Reclaim = (other: WorktreeName) => boolean;
+
+function takenOver(project: Project, block: Block, holder: string, reclaim: Reclaim): boolean {
+  if (!existsSync(holder)) {
+    freeStale(block);
+    return true;
+  }
+  if (dirname(holder) !== ledgerDir(project)) return false;
+  return reclaim(storedName(basename(holder)));
+}
+
+export async function claimBlock(project: Project, name: WorktreeName, reclaim: Reclaim): Promise<Block> {
   const held = blockOf(project, name);
   if (held !== null) return held;
   const holder = entryDir(project, name);
   for (const block of blocks()) {
     const taken = holderAt(claimFile(block));
     if (taken === holder) return block;
-    if (taken !== null || (await isInUse(block))) continue;
+    if (taken !== null && !takenOver(project, block, taken, reclaim)) continue;
+    if (await isInUse(block)) continue;
     if (placeClaim(block, holder)) {
       note(`port block ${blockText(block)} for ${name}`);
       return block;

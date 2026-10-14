@@ -711,7 +711,7 @@ describe("port blocks", () => {
       "no port block from 24000 to 24999 is free for task-a: worktrees hold some and other programs listen on the rest; setup is pending",
     );
     expect(refused.resolve).toBe(
-      "remove a worktree you are done with, or run agent-worktree prune to free the blocks of worktrees that are gone, then run the command again",
+      "remove a worktree you are done with, fix a teardown that failed for a worktree that is gone, or run agent-worktree prune in another clone whose gone worktrees hold blocks, then run the command again",
     );
     expect(stateKind(f, "task-a")).toBe("pending");
     expect(portRecord(f)).toEqual([]);
@@ -731,6 +731,47 @@ describe("port blocks", () => {
     await init(f.project, path);
     expect(blockOf(f, "task-a")).toBe(firstFree);
     expect(portRecord(f)).toEqual([String(firstFree)]);
+  });
+
+  test("create takes over the block of a worktree whose directory is gone, tearing it down as prune would", async () => {
+    const f = fixture({ teardown: PORT_RECORD });
+    const firstFree = await firstFreeBlock();
+    const gone = await create(f.project, f.name("task-a"));
+    rmSync(gone, { recursive: true, force: true });
+    await create(f.project, f.name("task-b"));
+    expect(portRecord(f)).toEqual([String(firstFree)]);
+    expect(list(f.project).map((item) => [item.state.name, item.state.kind])).toEqual([["task-b", "ready"]]);
+    expect(blockOf(f, "task-b")).toBe(firstFree);
+  });
+
+  test("create takes over the block of a deleted clone without a prune", async () => {
+    const f = fixture();
+    const firstFree = await firstFreeBlock();
+    const other = projectAt(repo());
+    await create(other, f.name("task-a"));
+    rmSync(dirname(other.primary), { recursive: true, force: true });
+    await create(f.project, f.name("task-a"));
+    expect(blockOf(f, "task-a")).toBe(firstFree);
+  });
+
+  test("create leaves the block of a gone worktree whose teardown fails, and takes the next", async () => {
+    const f = fixture({ teardown: "exit 3" });
+    const [first, second] = await freeBlocks();
+    const gone = await create(f.project, f.name("task-a"));
+    rmSync(gone, { recursive: true, force: true });
+    await create(f.project, f.name("task-b"));
+    expect(stateKind(f, "task-a")).toBe("orphaned");
+    expect(blockOf(f, "task-a")).toBe(first);
+    expect(blockOf(f, "task-b")).toBe(second);
+  });
+
+  test("create keeps the blocks of worktrees that are still there", async () => {
+    const f = fixture({ teardown: PORT_RECORD });
+    const [first, second] = await freeBlocks();
+    await create(f.project, f.name("task-a"));
+    await create(f.project, f.name("task-b"));
+    expect(portRecord(f)).toEqual([]);
+    expect([blockOf(f, "task-a"), blockOf(f, "task-b")]).toEqual([first, second]);
   });
 
   test("a worktree forced out past a failed teardown keeps its block until prune tears it down", async () => {
