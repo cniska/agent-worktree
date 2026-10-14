@@ -19,7 +19,7 @@ const refuse = refuser<{
   unsupported_layout: {
     message: ({ commonDir }) => `${commonDir} is not a .git directory inside the primary checkout`,
     resolve: () =>
-      "run agent-worktrees in a plain clone; a submodule, a bare repository and a separate git dir are not supported",
+      "run agent-worktree in a plain clone; a submodule, a bare repository and a separate git dir are not supported",
   },
 });
 

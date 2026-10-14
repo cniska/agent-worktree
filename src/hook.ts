@@ -11,14 +11,14 @@ const refuse = refuser<{
   hook_input: {
     message: ({ detail }) => `stdin is not a Claude Code hook event: ${detail}`,
     resolve: () =>
-      "run agent-worktrees hook only as a Claude Code hook, which writes the event JSON to its stdin",
+      "run agent-worktree hook only as a Claude Code hook, which writes the event JSON to its stdin",
   },
   hook_event: {
-    message: ({ event }) => `${event} is not an event agent-worktrees handles`,
-    resolve: () => "configure agent-worktrees hook under WorktreeCreate and WorktreeRemove only",
+    message: ({ event }) => `${event} is not an event agent-worktree handles`,
+    resolve: () => "configure agent-worktree hook under WorktreeCreate and WorktreeRemove only",
   },
   foreign_path: {
-    message: ({ path }) => `${path} is not a worktree agent-worktrees manages`,
+    message: ({ path }) => `${path} is not a worktree agent-worktree manages`,
     resolve: () => "remove that worktree with the tool that created it",
   },
 });

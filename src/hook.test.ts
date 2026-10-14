@@ -43,13 +43,13 @@ describe("parseHookEvent", () => {
       parseHookEvent(f.project, hookEvent({ hook_event_name: "WorktreeRemove", worktree_path: foreign })),
     );
     expect(refused.code).toBe("foreign_path");
-    expect(refused.message).toBe(`${foreign} is not a worktree agent-worktrees manages`);
+    expect(refused.message).toBe(`${foreign} is not a worktree agent-worktree manages`);
   });
 
   test("refuses any other event", () => {
     const refused = refusal(() => parseHookEvent(f.project, hookEvent({ hook_event_name: "SessionStart" })));
     expect(refused.code).toBe("hook_event");
-    expect(refused.message).toBe("SessionStart is not an event agent-worktrees handles");
+    expect(refused.message).toBe("SessionStart is not an event agent-worktree handles");
   });
 
   test("refuses stdin that is not an event", () => {

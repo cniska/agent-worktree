@@ -1,7 +1,7 @@
 type ErrorKind = "refusal" | "fault";
 
 export const BUG =
-  "stop and hand this error to the owner as a bug in agent-worktrees; no command you run resolves it";
+  "stop and hand this error to the owner as a bug in agent-worktree; no command you run resolves it";
 
 export class CodedError<Code extends string = string, Meta extends object = object> extends Error {
   override readonly name = "CodedError";

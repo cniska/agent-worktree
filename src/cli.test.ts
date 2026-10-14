@@ -26,15 +26,15 @@ describe("the cli", () => {
     const bare = cli(dir, []);
     expect(bare.status).toBe(0);
     expect(bare.stderr).toBe("");
-    expect(bare.stdout).toContain("agent-worktrees create <name>");
-    expect(bare.stdout).toContain("agent-worktrees remove [--force] <name>");
+    expect(bare.stdout).toContain("agent-worktree create <name>");
+    expect(bare.stdout).toContain("agent-worktree remove [--force] <name>");
     expect(cli(dir, ["--help"]).stdout).toBe(bare.stdout);
   });
 
   test("describes one command with --help", () => {
     const run = cli(scratchDir(), ["remove", "--help"]);
     expect(run.status).toBe(0);
-    expect(run.stdout).toStartWith("agent-worktrees remove [--force] <name>");
+    expect(run.stdout).toStartWith("agent-worktree remove [--force] <name>");
     expect(run.stdout).toContain("run teardown and remove the worktree");
   });
 
@@ -44,7 +44,7 @@ describe("the cli", () => {
     expect(run.status).toBe(2);
     expect(run.stdout).toBe("");
     expect(run.stderr).toBe(
-      "agent-worktrees: task-a is not an agent-worktrees command; agent-worktrees with no command lists them\n  agent-worktrees create|init|remove|prune|ls|path|hook\n",
+      "agent-worktree: task-a is not an agent-worktree command; agent-worktree with no command lists them\n  agent-worktree create|init|remove|prune|ls|path|hook\n",
     );
     expect(existsSync(path("task-a"))).toBe(false);
   });
@@ -54,20 +54,20 @@ describe("the cli", () => {
     expect(cli(dir, ["ls"])).toEqual({
       status: 1,
       stdout: "",
-      stderr: `agent-worktrees ls: ${dir} is not inside a git checkout\n  cd into the project's checkout and run the command again\n`,
+      stderr: `agent-worktree ls: ${dir} is not inside a git checkout\n  cd into the project's checkout and run the command again\n`,
     });
   });
 
   test("prints a usage refusal with the usage as the act, and exits 2", () => {
     const run = cli(scratchDir(), ["remove", "--bogus", "task-a"]);
     expect(run.status).toBe(2);
-    expect(run.stderr).toStartWith("agent-worktrees remove: Unknown option '--bogus'.");
-    expect(run.stderr).toEndWith("\n  agent-worktrees remove [--force] <name>\n");
+    expect(run.stderr).toStartWith("agent-worktree remove: Unknown option '--bogus'.");
+    expect(run.stderr).toEndWith("\n  agent-worktree remove [--force] <name>\n");
     expect(cli(scratchDir(), ["remove", "a", "b"])).toEqual({
       status: 2,
       stdout: "",
       stderr:
-        "agent-worktrees remove: agent-worktrees remove takes one worktree name, and got: a b\n  agent-worktrees remove [--force] <name>\n",
+        "agent-worktree remove: agent-worktree remove takes one worktree name, and got: a b\n  agent-worktree remove [--force] <name>\n",
     });
   });
 
@@ -84,7 +84,7 @@ describe("the cli", () => {
     expect(cli(repo(), ["ls"])).toEqual({
       status: 0,
       stdout: "",
-      stderr: "agent-worktrees: no task worktrees\n",
+      stderr: "agent-worktree: no task worktrees\n",
     });
   });
 
@@ -110,7 +110,7 @@ describe("the cli", () => {
     expect(cli(dir, ["ls"])).toEqual({
       status: 0,
       stdout: "",
-      stderr: "agent-worktrees: no task worktrees\n",
+      stderr: "agent-worktree: no task worktrees\n",
     });
   });
 });

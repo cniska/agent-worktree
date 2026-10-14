@@ -7,6 +7,6 @@ export function writeLines(lines: readonly string[]): void {
 export function writeError(command: string | null, error: unknown): void {
   const [message, resolve] =
     error instanceof CodedError ? [error.message, error.resolve] : [messageOf(error), BUG];
-  const prefix = command === null ? "agent-worktrees" : `agent-worktrees ${command}`;
+  const prefix = command === null ? "agent-worktree" : `agent-worktree ${command}`;
   process.stderr.write(`${prefix}: ${message}\n  ${resolve}\n`);
 }

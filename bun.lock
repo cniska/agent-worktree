@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "agent-worktrees",
+      "name": "agent-worktree",
       "devDependencies": {
         "@babel/parser": "^7.29.9",
         "@babel/types": "^7.29.8",

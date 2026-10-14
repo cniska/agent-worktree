@@ -24,7 +24,7 @@ export function caseSensitiveFilesystem(): boolean {
 }
 
 export function scratchDir(): string {
-  const dir = realpathSync(mkdtempSync(join(tmpdir(), "agent-worktrees-")));
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), "agent-worktree-")));
   scratchDirs.push(dir);
   return dir;
 }

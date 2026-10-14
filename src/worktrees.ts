@@ -54,17 +54,17 @@ const refuse = refuser<{
     resolve: ({ existing }) => `use the name ${existing}, or pick a name that differs in more than case`,
   },
   unmanaged: {
-    message: ({ path }) => `${path} exists but agent-worktrees did not create it`,
+    message: ({ path }) => `${path} exists but agent-worktree did not create it`,
     resolve: ({ path }) =>
       `remove it yourself, with git worktree remove ${path} when git lists it, or pick another name`,
   },
   orphaned: {
     message: ({ name }) => `${name} is registered but its worktree is gone, so its teardown never ran`,
-    resolve: () => "run agent-worktrees prune, then the command again",
+    resolve: () => "run agent-worktree prune, then the command again",
   },
   not_a_worktree: {
     message: ({ name, path }) => `${name} is registered but git does not list ${path} as a worktree`,
-    resolve: () => "remove the directory, then agent-worktrees prune",
+    resolve: () => "remove the directory, then agent-worktree prune",
   },
   setup_failed: {
     message: ({ checkout, exit }) => `${SETUP} ${describeExit(exit)} in ${checkout}; setup is pending`,
@@ -72,7 +72,7 @@ const refuse = refuser<{
   },
   not_registered: {
     message: ({ name, path }) => `${name} is not a registered worktree at ${path}`,
-    resolve: () => "run agent-worktrees ls to see the registered names",
+    resolve: () => "run agent-worktree ls to see the registered names",
   },
   locked: {
     message: ({ name, path }) => `${name} is locked at ${path}`,
@@ -82,24 +82,24 @@ const refuse = refuser<{
   dirty: {
     message: ({ name, path }) => `${name} has uncommitted or untracked files in ${path}`,
     resolve: ({ name }) =>
-      `commit or discard them, or run agent-worktrees remove --force ${name} to drop them`,
+      `commit or discard them, or run agent-worktree remove --force ${name} to drop them`,
   },
   submodules: {
     message: ({ name, path }) => `${name} contains submodules in ${path}, which git removes only by force`,
-    resolve: ({ name }) => `run agent-worktrees remove --force ${name}`,
+    resolve: ({ name }) => `run agent-worktree remove --force ${name}`,
   },
   teardown_failed: {
     message: ({ name, exit }) => `${TEARDOWN} ${describeExit(exit)} for ${name}; the worktree is kept`,
     resolve: ({ name }) =>
-      `fix what the script reported and run the command again, or run agent-worktrees remove --force ${name} to remove the worktree anyway`,
+      `fix what the script reported and run the command again, or run agent-worktree remove --force ${name} to remove the worktree anyway`,
   },
   teardowns_failed: {
     message: ({ names }) => `${TEARDOWN} failed for ${names.join(", ")}, which stay registered`,
-    resolve: () => "fix what the script reported, then run agent-worktrees prune again",
+    resolve: () => "fix what the script reported, then run agent-worktree prune again",
   },
   not_a_managed_checkout: {
     message: ({ checkout }) => `${checkout} is neither the primary checkout nor a registered task worktree`,
-    resolve: () => "cd into the primary checkout or a worktree agent-worktrees created, and run init there",
+    resolve: () => "cd into the primary checkout or a worktree agent-worktree created, and run init there",
   },
 });
 

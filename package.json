@@ -1,11 +1,11 @@
 {
-  "name": "agent-worktrees",
+  "name": "agent-worktree",
   "version": "0.1.0",
   "private": true,
   "license": "MIT",
   "type": "module",
   "bin": {
-    "agent-worktrees": "./bin/agent-worktrees"
+    "agent-worktree": "./bin/agent-worktree"
   },
   "scripts": {
     "format": "bunx biome check --write src",

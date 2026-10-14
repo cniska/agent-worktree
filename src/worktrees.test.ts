@@ -177,7 +177,7 @@ describe("create", () => {
     rmSync(f.setupRecord);
     const refused = refusal(() => create(f.project, name));
     expect(refused.code).toBe("not_a_worktree");
-    expect(refused.resolve).toBe("remove the directory, then agent-worktrees prune");
+    expect(refused.resolve).toBe("remove the directory, then agent-worktree prune");
     expect(existsSync(f.setupRecord)).toBe(false);
     expect(refusal(() => remove(f.project, name, true)).code).toBe("not_a_worktree");
     expect(list(f.project)).toEqual([{ path, state: { kind: "unlisted", name } }]);
@@ -280,7 +280,7 @@ describe("remove", () => {
     const refused = refusal(() => remove(f.project, name, false));
     expect(refused.code).toBe("dirty");
     expect(refused.resolve).toBe(
-      "commit or discard them, or run agent-worktrees remove --force task-a to drop them",
+      "commit or discard them, or run agent-worktree remove --force task-a to drop them",
     );
     expect(existsSync(f.teardownRecord)).toBe(false);
     expect(existsSync(path)).toBe(true);
@@ -429,7 +429,7 @@ describe("prune", () => {
     expect(refused.message).toBe(
       "scripts/worktree-teardown.sh failed for task-c, task-d, which stay registered",
     );
-    expect(refused.resolve).toBe("fix what the script reported, then run agent-worktrees prune again");
+    expect(refused.resolve).toBe("fix what the script reported, then run agent-worktree prune again");
     expect(stateKind(f, "task-c")).toBe("orphaned");
     expect(stateKind(f, "task-d")).toBe("orphaned");
     script(f.dir, "worktree-teardown.sh", "exit 0");
@@ -449,6 +449,14 @@ describe("list", () => {
       ["task-z", "ready"],
       ["user+feature", "unmanaged"],
     ]);
+  });
+
+  test("reads a registration where releases named agent-worktrees wrote it, so the rename orphans none", () => {
+    const f = fixture();
+    git(f.dir, ["worktree", "add", "-q", f.path("task-a"), "-b", "task-a"]);
+    mkdirSync(join(f.dir, ".git", "agent-worktrees", "task-a"), { recursive: true });
+    writeFileSync(join(f.dir, ".git", "agent-worktrees", "task-a", "ready"), "");
+    expect(stateKind(f, "task-a")).toBe("ready");
   });
 });
 

@@ -42,8 +42,8 @@ if (name === undefined || name === "--help" || name === "-h") {
   writeLines(COMMANDS.map(describe));
 } else if (command === undefined) {
   const unknown = usageRefusal(
-    `${name} is not an agent-worktrees command; agent-worktrees with no command lists them`,
-    `agent-worktrees ${COMMANDS.map((candidate) => candidate.name).join("|")}`,
+    `${name} is not an agent-worktree command; agent-worktree with no command lists them`,
+    `agent-worktree ${COMMANDS.map((candidate) => candidate.name).join("|")}`,
   );
   writeError(null, unknown);
   process.exitCode = exitCodeOf(unknown);

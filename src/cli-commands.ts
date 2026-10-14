@@ -10,7 +10,7 @@ import { create, init, type Listed, list, prune, remove } from "./worktrees";
 function noPositionals(positionals: readonly string[], command: Command): void {
   if (positionals.length > 0)
     throw usageRefusal(
-      `agent-worktrees ${command.name} takes no argument, and got: ${positionals.join(" ")}`,
+      `agent-worktree ${command.name} takes no argument, and got: ${positionals.join(" ")}`,
       command.usage,
     );
 }
@@ -22,7 +22,7 @@ function namedTarget(
   const [raw, ...rest] = positionals;
   if (raw === undefined || rest.length > 0)
     throw usageRefusal(
-      `agent-worktrees ${command.name} takes one worktree name, and got: ${positionals.join(" ")}`,
+      `agent-worktree ${command.name} takes one worktree name, and got: ${positionals.join(" ")}`,
       command.usage,
     );
   const current = project(process.cwd());
@@ -63,7 +63,7 @@ function listedLine({ path, state }: Listed): string {
 
 const createCommand: Command = {
   name: "create",
-  usage: "agent-worktrees create <name>",
+  usage: "agent-worktree create <name>",
   summary: "create the worktree, run setup and print its path; rerun to resume a failed setup",
   options: {},
   run(positionals) {
@@ -74,7 +74,7 @@ const createCommand: Command = {
 
 const initCommand: Command = {
   name: "init",
-  usage: "agent-worktrees init",
+  usage: "agent-worktree init",
   summary: "run setup in the current checkout, primary or task worktree",
   options: {},
   run(positionals) {
@@ -87,7 +87,7 @@ const initCommand: Command = {
 
 const removeCommand: Command = {
   name: "remove",
-  usage: "agent-worktrees remove [--force] <name>",
+  usage: "agent-worktree remove [--force] <name>",
   summary: "run teardown and remove the worktree, keeping its branch",
   options: { force: { type: "boolean" } },
   run(positionals, values) {
@@ -98,7 +98,7 @@ const removeCommand: Command = {
 
 const pruneCommand: Command = {
   name: "prune",
-  usage: "agent-worktrees prune",
+  usage: "agent-worktree prune",
   summary: "prune git's stale worktree entries and tear down every registered worktree that is gone",
   options: {},
   run(positionals) {
@@ -110,7 +110,7 @@ const pruneCommand: Command = {
 
 const lsCommand: Command = {
   name: "ls",
-  usage: "agent-worktrees ls",
+  usage: "agent-worktree ls",
   summary: "list the worktrees: name, state, branch, path",
   options: {},
   run(positionals) {
@@ -123,7 +123,7 @@ const lsCommand: Command = {
 
 const pathCommand: Command = {
   name: "path",
-  usage: "agent-worktrees path <name>",
+  usage: "agent-worktree path <name>",
   summary: "print the worktree's path",
   options: {},
   run(positionals) {
@@ -134,7 +134,7 @@ const pathCommand: Command = {
 
 const hookCommand: Command = {
   name: "hook",
-  usage: "agent-worktrees hook",
+  usage: "agent-worktree hook",
   summary: "handle a Claude Code WorktreeCreate or WorktreeRemove event read from stdin",
   options: {},
   run(positionals) {

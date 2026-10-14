@@ -1,10 +1,10 @@
 {
-  "name": "cniska-worktrees",
-  "description": "Sends every session's task worktrees through agent-worktrees: a note to create and remove them with the CLI, and WorktreeCreate and WorktreeRemove hooks for Claude Code's own.",
+  "name": "cniska-worktree",
+  "description": "Sends every session's task worktrees through agent-worktree: a note to create and remove them with the CLI, and WorktreeCreate and WorktreeRemove hooks for Claude Code's own.",
   "author": {
     "name": "Christoffer Niska"
   },
-  "homepage": "https://github.com/cniska/agent-worktrees",
-  "repository": "https://github.com/cniska/agent-worktrees",
+  "homepage": "https://github.com/cniska/agent-worktree",
+  "repository": "https://github.com/cniska/agent-worktree",
   "license": "MIT"
 }

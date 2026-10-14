@@ -17,7 +17,7 @@ Another module reaches a module only through its bare-named file, so `cli`'s par
 
 | Prefix | Responsibility |
 | --- | --- |
-| `cli` | The `agent-worktrees` command line, over the domain below |
+| `cli` | The `agent-worktree` command line, over the domain below |
 | `worktrees` | The lifecycle: create, init, remove, prune and list, from a worktree's state read fresh each time |
 | `hook` | Parse a Claude Code `WorktreeCreate` or `WorktreeRemove` event into a worktree name |
 | `project` | The project a directory belongs to, worktree names, and where a worktree lives |

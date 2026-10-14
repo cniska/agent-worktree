@@ -1,3 +1,3 @@
 export function note(text: string): void {
-  process.stderr.write(`agent-worktrees: ${text}\n`);
+  process.stderr.write(`agent-worktree: ${text}\n`);
 }

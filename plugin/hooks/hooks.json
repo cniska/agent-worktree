@@ -16,7 +16,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "agent-worktrees hook",
+            "command": "agent-worktree hook",
             "timeout": 1800
           }
         ]
@@ -27,7 +27,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "agent-worktrees hook",
+            "command": "agent-worktree hook",
             "timeout": 1800
           }
         ]
