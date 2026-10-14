@@ -67,4 +67,4 @@ The plugin brings neither Bun nor the CLI. Install the CLI first: with the plugi
 
 ## Development
 
-`bun run check` runs the lint, the typecheck and the tests. [`AGENTS.md`](AGENTS.md) holds the repository's rules. The plugin lives in `plugin/`, apart from the repository root, so the CLI's `bin/` stays off the `PATH` Claude Code gives a plugin.
+`bun run check` runs the lint, the typecheck and the tests; `bun run acceptance` runs the acceptance suite, which proves each criterion in [`SPEC.md`](SPEC.md) through the CLI. [`AGENTS.md`](AGENTS.md) holds the repository's rules. The plugin lives in `plugin/`, apart from the repository root, so the CLI's `bin/` stays off the `PATH` Claude Code gives a plugin.

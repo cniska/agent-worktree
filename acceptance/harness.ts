@@ -1,0 +1,133 @@
+import { expect } from "bun:test";
+import { spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+
+const ENTRY = join(import.meta.dir, "..", "src", "cli.ts");
+
+const NO_TRANSPILER_CACHE = "0";
+
+type Env = Readonly<Record<string, string>>;
+
+export type Ran = { readonly exitCode: number; readonly stdout: string; readonly stderr: string };
+
+export type World = {
+  readonly root: string;
+  readonly home: string;
+  readonly data: string;
+  readonly env: Env;
+};
+
+const scratchDirs: string[] = [];
+
+export function removeScratch(): void {
+  for (const dir of scratchDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+}
+
+export function world(): World {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "agent-worktree-acceptance-")));
+  scratchDirs.push(root);
+  const home = join(root, "home");
+  const xdg = { XDG_DATA_HOME: "data", XDG_CONFIG_HOME: "config", XDG_STATE_HOME: "state" };
+  for (const dir of [home, ...Object.values(xdg).map((name) => join(root, name))]) mkdirSync(dir);
+  return {
+    root,
+    home,
+    data: join(root, "data", "agent-worktree"),
+    env: {
+      PATH: process.env.PATH ?? "/usr/bin:/bin",
+      HOME: home,
+      ...Object.fromEntries(Object.entries(xdg).map(([variable, name]) => [variable, join(root, name)])),
+      GIT_CONFIG_GLOBAL: "/dev/null",
+      GIT_CONFIG_NOSYSTEM: "1",
+      GIT_AUTHOR_NAME: "Test Author",
+      GIT_AUTHOR_EMAIL: "author@example.test",
+      GIT_COMMITTER_NAME: "Test Author",
+      GIT_COMMITTER_EMAIL: "author@example.test",
+      BUN_RUNTIME_TRANSPILER_CACHE_PATH: NO_TRANSPILER_CACHE,
+    },
+  };
+}
+
+export function run(
+  w: World,
+  cwd: string,
+  args: readonly string[],
+  { env, unset }: { env?: Env; unset?: readonly string[] } = {},
+): Ran {
+  const merged = Object.entries({ ...w.env, ...env }).filter(([name]) => !unset?.includes(name));
+  const ran = spawnSync(process.execPath, [ENTRY, ...args], {
+    cwd,
+    encoding: "utf8",
+    env: Object.fromEntries(merged),
+  });
+  return { exitCode: ran.status ?? -1, stdout: ran.stdout, stderr: ran.stderr };
+}
+
+export function git(w: World, cwd: string, args: readonly string[]): string {
+  const ran = spawnSync("git", ["-C", cwd, ...args], { encoding: "utf8", env: w.env });
+  expect({ args, status: ran.status, stderr: ran.stderr }).toMatchObject({ status: 0 });
+  return ran.stdout.trim();
+}
+
+export function repo(w: World, at = join(w.root, "clones", "repo")): string {
+  mkdirSync(dirname(at), { recursive: true });
+  git(w, w.root, ["init", "-q", "-b", "main", at]);
+  writeFileSync(join(at, "README.md"), "initial\n");
+  git(w, at, ["add", "README.md"]);
+  git(w, at, ["commit", "-q", "-m", "initial"]);
+  return at;
+}
+
+export function keyOf(w: World, path: string): string {
+  expect(dirname(dirname(path))).toBe(w.data);
+  return dirname(path).slice(w.data.length + 1);
+}
+
+export type Project = { readonly dir: string; path(name: string): string };
+
+export function project(w: World): Project {
+  const dir = repo(w);
+  const [probe = ""] = succeeded(run(w, dir, ["path", "probe"]));
+  const key = keyOf(w, probe);
+  return { dir, path: (name) => join(w.data, key, name) };
+}
+
+const ONE_LINE_EACH = /^(?:[^\n]+\n)*$/;
+
+export function succeeded(ran: Ran): readonly string[] {
+  expect({ exitCode: ran.exitCode, stderr: ran.stderr }).toMatchObject({ exitCode: 0 });
+  expect(ran.stdout).toMatch(ONE_LINE_EACH);
+  return ran.stdout.split("\n").slice(0, -1);
+}
+
+const STATES = [
+  "ready",
+  "setup pending",
+  "orphaned (prune)",
+  "unlisted",
+  "unmanaged",
+  "legacy (move or drop)",
+] as const;
+
+export type Listed = {
+  readonly name: string;
+  readonly state: (typeof STATES)[number];
+  readonly branch: string;
+  readonly path: string;
+};
+
+function isState(text: string): text is Listed["state"] {
+  return STATES.some((state) => state === text);
+}
+
+export function ls(w: World, dir: string): readonly Listed[] {
+  return succeeded(run(w, dir, ["ls"])).map((line) => {
+    const fields = line.split("\t");
+    expect(fields).toHaveLength(4);
+    const [name = "", state = "", branch = "", path = ""] = fields;
+    if (!isState(state)) throw new Error(`${state} is not a state ls prints`);
+    return { name, state, branch, path };
+  });
+}

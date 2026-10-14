@@ -1,0 +1,26 @@
+import { test } from "bun:test";
+
+test.todo("AC-5 create refuses each invalid name, a case collision, an unsupported layout and a non-checkout", () => {});
+test.todo("AC-6 create makes the worktree on its branch, sets it up once, and lists it ready", () => {});
+test.todo("AC-7 a failed setup leaves the worktree pending, and the rerun resumes it", () => {});
+test.todo("AC-8 create and remove refuse unmanaged, orphaned and unlisted worktrees until their act is done", () => {});
+test.todo("AC-9 init sets up the primary, a pending task worktree, and refuses any other checkout", () => {});
+test.todo("AC-10 remove tears down in the primary, removes the worktree and keeps its branch", () => {});
+test.todo("AC-11 remove refuses dirty and submodule worktrees without force, and locked ones always", () => {});
+test.todo("AC-12 a failed teardown keeps the worktree, force removes it, and prune finishes it", () => {});
+test.todo("AC-13 remove refuses a name that is not registered", () => {});
+test.todo("AC-14 prune names the worktrees whose teardown failed and unregisters the rest", () => {});
+test.todo("AC-15 ls lists every worktree sorted by name, or notes there are none", () => {});
+test.todo("AC-16 a non-executable or unrunnable script is refused, and a project without scripts works", () => {});
+test.todo("AC-17 a setup script's stdout stays off the CLI's stdout", () => {});
+test.todo("AC-18 hook creates on WorktreeCreate and force-removes on WorktreeRemove", () => {});
+test.todo("AC-19 hook refuses a foreign path, a nested name, another event and stdin that is not JSON", () => {});
+test.todo("AC-20 the plugin runs hook for both events and the note on the four session sources", () => {});
+test.todo("AC-21 a worktree in the earlier location is listed as legacy and refused by every command", () => {});
+test.todo("AC-22 the keep and drop acts converge a worktree in the earlier location", () => {});
+test.todo("AC-23 an unregistered directory in the earlier location is not agent-worktree's", () => {});
+test.todo("AC-24 results, refusals and usage errors exit 0, 1 and 2 with their output", () => {});
+test.todo("AC-25 the usage lists every command, or one with --help", () => {});
+test.todo("AC-26 each command reads state changed on disk since the last", () => {});
+test.todo("AC-27 the tests use scratch HOME and XDG directories", () => {});
+test.todo("AC-28 the commands work with the network unavailable", () => {});

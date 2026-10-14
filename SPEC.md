@@ -148,7 +148,7 @@ Two agents in one checkout overwrite each other's files, so parallel work needs 
 - **D-1** — The `agent-worktree` CLI, run by Bun from a checkout and linked onto `PATH` by `mise install`.
 - **D-2** — The `cniska-worktree` Claude Code plugin in `plugin/`.
 - **D-3** — `README.md`, `AGENTS.md`, `src/README.md` and this spec.
-- **D-4** — The test suite, run by `bun run check`.
+- **D-4** — The test suite, run by `bun run check`, and the acceptance suite, run by `bun run acceptance`, whose test names cite the criteria in §5.
 
 ## 7. Constraints (fixed)
 
@@ -171,10 +171,9 @@ Two agents in one checkout overwrite each other's files, so parallel work needs 
 
 Known gaps, where the code does not yet meet a requirement:
 
-- **AC citations.** No check ties the tests to these criteria; the tests name behavior, not IDs.
+- **A whitespace `HOME`.** With `XDG_DATA_HOME` unset and `HOME` only spaces, the data directory is under the spaces as a relative path, not under the account's home (FR-3); AC-2's test covers only an unset and an empty `HOME`.
 
 Open questions:
 
-- **An acceptance suite.** agent-record proves its criteria with a suite that drives the CLI and a check that ties it to the spec. Here AGENTS.md keeps the tests in process and lets only `src/cli.test.ts` spawn the CLI. Should this repo gain such a suite and check?
 - **A moved primary.** FR-4 keys by path, so after the primary moves, its worktrees read as gone and `prune` would tear them down. Should agent-worktree refuse instead, naming `git worktree repair`?
 - **When FR-41 to FR-45 go.** They serve only worktrees made before the move to FR-1; they can be deleted once the owner's machines hold none.

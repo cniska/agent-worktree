@@ -1,31 +1,17 @@
 import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { parse } from "@babel/parser";
-import {
-  type ExportNamedDeclaration,
-  type Identifier,
-  type ImportDeclaration,
-  isNode,
-  type Node,
-  type Statement,
-  type StringLiteral,
+import type {
+  ExportNamedDeclaration,
+  Identifier,
+  ImportDeclaration,
+  Node,
+  Statement,
+  StringLiteral,
 } from "@babel/types";
+import { nodesOf } from "./syntax.test-support";
 
 const SRC = import.meta.dir;
-
-function* nodesOf(text: string): Iterable<Node> {
-  yield* walk(parse(text, { sourceType: "module", plugins: ["typescript"] }).program);
-}
-
-function* walk(value: unknown): Iterable<Node> {
-  if (Array.isArray(value)) {
-    for (const item of value) yield* walk(item);
-  } else if (isNode(value)) {
-    yield value;
-    for (const child of Object.values(value)) yield* walk(child);
-  }
-}
 
 type Import = { readonly path: string; readonly typeOnly: boolean; readonly names: readonly string[] };
 
