@@ -81,13 +81,16 @@ export function run(w: World, cwd: string, args: readonly string[], options: Run
 
 const LAUNCHER = join(import.meta.dir, "..", "bin", "agent-worktree");
 
-export function launch(w: World, cwd: string, args: readonly string[]): Ran {
+export type Launched = Ran & { readonly callerPath: string };
+
+export function launch(w: World, cwd: string, args: readonly string[]): Launched {
   const bin = join(w.root, "mise-bin");
   mkdirSync(bin, { recursive: true });
   const mise = join(bin, "mise");
   writeFileSync(mise, `#!/bin/sh\n[ "$1" = which ] && echo "${process.execPath}"\n`);
   chmodSync(mise, 0o755);
-  return spawn(w, cwd, [LAUNCHER, ...args], { env: { PATH: `${bin}:${w.env.PATH}` } });
+  const callerPath = `${bin}:${w.env.PATH}`;
+  return { ...spawn(w, cwd, [LAUNCHER, ...args], { env: { PATH: callerPath } }), callerPath };
 }
 
 export const PLUGIN = join(import.meta.dir, "..", "plugin");

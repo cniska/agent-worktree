@@ -51,11 +51,12 @@ test("AC-29 a script run through the launcher gets the caller's environment and 
   const record = join(w.root, "env.json");
   const dump = `require("node:fs").writeFileSync(${JSON.stringify(record)}, JSON.stringify(process.env))`;
   script(w, p.dir, "worktree-setup.sh", `exec "${process.execPath}" -e '${dump}'`);
-  expect(succeeded(launch(w, p.dir, ["create", "task-a"]))).toEqual([p.path("task-a")]);
+  const launched = launch(w, p.dir, ["create", "task-a"]);
+  expect(succeeded(launched)).toEqual([p.path("task-a")]);
   const received = Object.entries(JSON.parse(readFileSync(record, "utf8")));
   expect(Object.fromEntries(received.filter(([name]) => !SET_BY_SH.has(name)))).toEqual({
     ...w.env,
-    PATH: `${join(w.root, "mise-bin")}:${w.env.PATH}`,
+    PATH: launched.callerPath,
     WORKTREE_NAME: "task-a",
     WORKTREE_PATH: p.path("task-a"),
     WORKTREE_PRIMARY: p.dir,
