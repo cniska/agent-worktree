@@ -62,7 +62,7 @@ export function world(): World {
 const OFFLINE = [
   "/usr/bin/sandbox-exec",
   "-p",
-  '(version 1)(allow default)(deny network*)(allow network-bind network-inbound (local ip "*:*"))',
+  '(version 1)(allow default)(deny network*)(allow network-outbound (remote ip "localhost:*"))',
 ];
 
 type RunOptions = { readonly stdin?: string; readonly env?: Env; readonly unset?: readonly string[] };
@@ -82,27 +82,27 @@ function spawn(w: World, cwd: string, argv: readonly string[], options: RunOptio
   return { exitCode: ran.status ?? -1, stdout: ran.stdout, stderr: ran.stderr };
 }
 
-export async function runAtOnce(
+export async function runAsync(w: World, cwd: string, args: readonly string[]): Promise<Ran> {
+  const child = Bun.spawn([...OFFLINE, process.execPath, ENTRY, ...args], {
+    cwd,
+    env: environment(w, {}),
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const [stdout, stderr, exitCode] = await Promise.all([
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+    child.exited,
+  ]);
+  return { exitCode, stdout, stderr };
+}
+
+export function runAtOnce(
   w: World,
   cwd: string,
   runs: readonly (readonly string[])[],
 ): Promise<readonly Ran[]> {
-  return Promise.all(
-    runs.map(async (args) => {
-      const child = Bun.spawn([...OFFLINE, process.execPath, ENTRY, ...args], {
-        cwd,
-        env: environment(w, {}),
-        stdout: "pipe",
-        stderr: "pipe",
-      });
-      const [stdout, stderr, exitCode] = await Promise.all([
-        new Response(child.stdout).text(),
-        new Response(child.stderr).text(),
-        child.exited,
-      ]);
-      return { exitCode, stdout, stderr };
-    }),
-  );
+  return Promise.all(runs.map((args) => runAsync(w, cwd, args)));
 }
 
 export function run(w: World, cwd: string, args: readonly string[], options: RunOptions = {}): Ran {
@@ -284,32 +284,32 @@ const BLOCK_WIDTH = 10;
 
 const BLOCK_COUNT = 100;
 
-function boundOn(hostname: string, port: number): boolean {
+async function listenedOn(hostname: string, port: number): Promise<boolean> {
   try {
-    Bun.listen({ hostname, port, socket: { data() {} } }).stop(true);
-    return false;
-  } catch {
+    (await Bun.connect({ hostname, port, socket: { data() {} } })).terminate();
     return true;
+  } catch {
+    return false;
   }
 }
 
-function blockBound(block: number): boolean {
-  return Array.from({ length: BLOCK_WIDTH }, (_, offset) => block + offset).some((port) =>
-    ["127.0.0.1", "0.0.0.0", "::1", "::"].some((host) => boundOn(host, port)),
-  );
+async function blockInUse(block: number): Promise<boolean> {
+  const ports = Array.from({ length: BLOCK_WIDTH }, (_, offset) => block + offset);
+  const probes = ports.flatMap((port) => ["127.0.0.1", "::1"].map((host) => listenedOn(host, port)));
+  return (await Promise.all(probes)).some((listened) => listened);
 }
 
-type FreeBlocks = readonly [number, number, ...number[]];
+type FreeBlocks = readonly [number, number, number, ...number[]];
 
-function atLeastTwo(blocks: readonly number[]): blocks is FreeBlocks {
-  return blocks.length >= 2;
+function atLeastThree(blocks: readonly number[]): blocks is FreeBlocks {
+  return blocks.length >= 3;
 }
 
-export function freeBlocks(): FreeBlocks {
-  const free = Array.from({ length: BLOCK_COUNT }, (_, index) => FIRST_BLOCK + index * BLOCK_WIDTH).filter(
-    (block) => !blockBound(block),
-  );
-  if (!atLeastTwo(free)) throw new Error("fewer than two port blocks are free on this machine");
+export async function freeBlocks(): Promise<FreeBlocks> {
+  const all = Array.from({ length: BLOCK_COUNT }, (_, index) => FIRST_BLOCK + index * BLOCK_WIDTH);
+  const inUse = await Promise.all(all.map(blockInUse));
+  const free = all.filter((_, index) => !inUse[index]);
+  if (!atLeastThree(free)) throw new Error("fewer than three port blocks are free on this machine");
   return free;
 }
 
@@ -317,12 +317,35 @@ export function blockText(block: number): string {
   return `${block}-${block + BLOCK_WIDTH - 1}`;
 }
 
-export function holding<T>(ports: readonly number[], body: () => T): T {
-  const held = ports.map((port) => Bun.listen({ hostname: "127.0.0.1", port, socket: { data() {} } }));
+export type Address = { readonly hostname: string; readonly port: number };
+
+export type Listener = { readonly connections: () => number };
+
+export function onLoopback(ports: readonly number[]): readonly Address[] {
+  return ports.map((port) => ({ hostname: "127.0.0.1", port }));
+}
+
+export async function holding<T>(
+  addresses: readonly Address[],
+  body: (held: readonly Listener[]) => Promise<T>,
+): Promise<T> {
+  const counts = addresses.map(() => 0);
+  const held = addresses.map(({ hostname, port }, index) =>
+    Bun.listen({
+      hostname,
+      port,
+      socket: {
+        open() {
+          counts[index] = (counts[index] ?? 0) + 1;
+        },
+        data() {},
+      },
+    }),
+  );
   try {
-    return body();
+    return await body(addresses.map((_, index) => ({ connections: () => counts[index] ?? 0 })));
   } finally {
-    for (const listener of held) listener.stop(true);
+    for (const each of held) each.stop(true);
   }
 }
 

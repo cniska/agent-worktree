@@ -13,7 +13,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { CodedError } from "./coded-error";
-import { type Block, blocks, isBound } from "./ports";
+import { type Block, blocks, isInUse } from "./ports";
 import { type Project, parseName, type WorktreeName, worktreePath } from "./project";
 
 const scratchDirs: string[] = [];
@@ -99,14 +99,18 @@ export type Fixture = {
   readonly project: Project;
   readonly setupRecord: string;
   readonly teardownRecord: string;
-  readonly firstFreeBlock: Block;
   name(raw: string): WorktreeName;
   path(raw: string): string;
 };
 
-function firstFreeBlock(): Block {
-  const free = blocks().find((block) => !isBound(block));
-  if (free === undefined) throw new Error("every port block is bound on this machine");
+export async function freeBlocks(): Promise<readonly Block[]> {
+  const inUse = await Promise.all(blocks().map(isInUse));
+  return blocks().filter((_, index) => !inUse[index]);
+}
+
+export async function firstFreeBlock(): Promise<Block> {
+  const [free] = await freeBlocks();
+  if (free === undefined) throw new Error("every port block is in use on this machine");
   return free;
 }
 
@@ -131,7 +135,6 @@ export function fixture({ setup, teardown }: { setup?: string; teardown?: string
     project: current,
     setupRecord: join(dirname(dir), RECORD.setup),
     teardownRecord: join(dirname(dir), RECORD.teardown),
-    firstFreeBlock: firstFreeBlock(),
     name,
     path: (raw) => worktreePath(current, name(raw)),
   };
@@ -149,6 +152,16 @@ export function hookEvent(fields: Record<string, string>): string {
 export function refusal(run: () => unknown): CodedError {
   try {
     run();
+  } catch (error) {
+    if (error instanceof CodedError && error.kind === "refusal") return error;
+    throw error;
+  }
+  throw new Error("expected a refusal");
+}
+
+export async function rejection(run: () => Promise<unknown>): Promise<CodedError> {
+  try {
+    await run();
   } catch (error) {
     if (error instanceof CodedError && error.kind === "refusal") return error;
     throw error;

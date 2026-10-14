@@ -11,7 +11,7 @@ export type Command = {
   readonly usage: string;
   readonly summary: string;
   readonly options: Options;
-  run(positionals: readonly string[], values: Values): readonly string[];
+  run(positionals: readonly string[], values: Values): Promise<readonly string[]>;
 };
 
 export const USAGE_CODE = "usage";

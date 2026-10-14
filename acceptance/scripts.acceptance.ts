@@ -56,13 +56,13 @@ test("AC-17 a setup script's stdout stays off the CLI's stdout", () => {
   expect(ran.stderr).toContain("installing dependencies\n");
 });
 
-test("AC-29 a script run through the launcher gets the caller's environment and the FR-33 variables", () => {
+test("AC-29 a script run through the launcher gets the caller's environment and the FR-33 variables", async () => {
   const w = world();
   const p = project(w);
   const record = join(w.root, "env.json");
   const dump = `require("node:fs").writeFileSync(${JSON.stringify(record)}, JSON.stringify(process.env))`;
   script(w, p.dir, "worktree-setup.sh", `exec "${process.execPath}" -e '${dump}'`);
-  const [block] = freeBlocks();
+  const [block] = await freeBlocks();
   const launched = launch(w, p.dir, ["create", "task-a"]);
   expect(succeeded(launched)).toEqual([p.path("task-a")]);
   const received = Object.entries(JSON.parse(readFileSync(record, "utf8")));

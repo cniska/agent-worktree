@@ -198,8 +198,8 @@ function legacyRefusal(project: Project, name: WorktreeName, worktree: Worktree)
   return refuse("legacy_location", { name, path: worktree.path, target: worktreePath(project, name) });
 }
 
-function setUp(project: Project, name: WorktreeName | null, checkout: string): void {
-  const block = name === null ? null : claimBlock(project, name);
+async function setUp(project: Project, name: WorktreeName | null, checkout: string): Promise<void> {
+  const block = name === null ? null : await claimBlock(project, name);
   const script = scriptIn(checkout, SETUP);
   if (script !== null) {
     const exit = runScript(script, checkout, { name, path: checkout, primary: project.primary, block });
@@ -223,7 +223,7 @@ function add(project: Project, name: WorktreeName, path: string, snap: Snapshot)
   register(project, name);
 }
 
-export function create(project: Project, name: WorktreeName): string {
+export async function create(project: Project, name: WorktreeName): Promise<string> {
   const path = worktreePath(project, name);
   const snap = snapshot(project);
   const state = stateIn(snap, project, name);
@@ -246,7 +246,7 @@ export function create(project: Project, name: WorktreeName): string {
     default:
       return unreachable(state);
   }
-  setUp(project, name, path);
+  await setUp(project, name, path);
   return path;
 }
 
@@ -346,6 +346,6 @@ function managedName(project: Project, checkout: string): WorktreeName | null {
   }
 }
 
-export function init(project: Project, checkout: string): void {
-  setUp(project, managedName(project, checkout), checkout);
+export async function init(project: Project, checkout: string): Promise<void> {
+  await setUp(project, managedName(project, checkout), checkout);
 }

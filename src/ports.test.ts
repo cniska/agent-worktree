@@ -1,11 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { blocks, blockText, isBound, parseBlock } from "./ports";
-
-function freeBlock() {
-  const free = blocks().find((block) => !isBound(block));
-  if (free === undefined) throw new Error("every port block is bound on this machine");
-  return free;
-}
+import { blocks, blockText, isInUse, parseBlock } from "./ports";
+import { firstFreeBlock } from "./repo.test-support";
 
 describe("blocks", () => {
   test("are a hundred blocks of ten from 24000", () => {
@@ -21,18 +16,18 @@ describe("blocks", () => {
   });
 });
 
-describe("isBound", () => {
+describe("isInUse", () => {
   test.each(["127.0.0.1", "0.0.0.0", "::1", "::"])(
-    "sees a port held on %s anywhere in the block",
-    (hostname) => {
-      const block = freeBlock();
+    "sees a program listening on %s anywhere in the block",
+    async (hostname) => {
+      const block = await firstFreeBlock();
       const held = Bun.listen({ hostname, port: block + 9, socket: { data() {} } });
       try {
-        expect(isBound(block)).toBe(true);
+        expect(await isInUse(block)).toBe(true);
       } finally {
         held.stop(true);
       }
-      expect(isBound(block)).toBe(false);
+      expect(await isInUse(block)).toBe(false);
     },
   );
 });

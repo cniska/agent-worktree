@@ -19,7 +19,7 @@ function describe({ usage, summary }: Command): string {
   return `${usage.padEnd(USAGE_WIDTH)} ${summary}`;
 }
 
-function run(command: Command, args: readonly string[]): readonly string[] {
+async function run(command: Command, args: readonly string[]): Promise<readonly string[]> {
   let parsed: ReturnType<typeof parseArgs>;
   try {
     parsed = parseArgs({
@@ -49,7 +49,7 @@ if (name === undefined || name === "--help" || name === "-h") {
   process.exitCode = exitCodeOf(unknown);
 } else {
   try {
-    writeLines(run(command, args));
+    writeLines(await run(command, args));
   } catch (error) {
     writeError(command.name, error);
     process.exitCode = exitCodeOf(error);

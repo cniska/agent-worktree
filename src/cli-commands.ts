@@ -76,9 +76,9 @@ const createCommand: Command = {
   usage: "agent-worktree create <name>",
   summary: "create the worktree, run setup and print its path; rerun to resume a failed setup",
   options: {},
-  run(positionals) {
+  async run(positionals) {
     const target = namedTarget(positionals, this);
-    return [create(target.project, target.name)];
+    return [await create(target.project, target.name)];
   },
 };
 
@@ -87,10 +87,10 @@ const initCommand: Command = {
   usage: "agent-worktree init",
   summary: "run setup in the current checkout, primary or task worktree",
   options: {},
-  run(positionals) {
+  async run(positionals) {
     noPositionals(positionals, this);
     const current = checkout(process.cwd());
-    init(current.project, current.toplevel);
+    await init(current.project, current.toplevel);
     return [];
   },
 };
@@ -100,7 +100,7 @@ const removeCommand: Command = {
   usage: "agent-worktree remove [--force] <name>",
   summary: "run teardown and remove the worktree, keeping its branch",
   options: { force: { type: "boolean" } },
-  run(positionals, values) {
+  async run(positionals, values) {
     const target = namedTarget(positionals, this);
     return [removed(remove(target.project, target.name, values.force === true))];
   },
@@ -111,7 +111,7 @@ const pruneCommand: Command = {
   usage: "agent-worktree prune",
   summary: "prune git's stale worktree entries and tear down every registered worktree that is gone",
   options: {},
-  run(positionals) {
+  async run(positionals) {
     noPositionals(positionals, this);
     prune(project(process.cwd()));
     return [];
@@ -123,7 +123,7 @@ const lsCommand: Command = {
   usage: "agent-worktree ls",
   summary: "list the worktrees: name, state, branch, port block, path",
   options: {},
-  run(positionals) {
+  async run(positionals) {
     noPositionals(positionals, this);
     const lines = list(project(process.cwd())).map(listedLine);
     if (lines.length === 0) note(NOTHING_LISTED);
@@ -136,7 +136,7 @@ const pathCommand: Command = {
   usage: "agent-worktree path <name>",
   summary: "print the worktree's path",
   options: {},
-  run(positionals) {
+  async run(positionals) {
     const target = namedTarget(positionals, this);
     return [worktreePath(target.project, target.name)];
   },
@@ -147,13 +147,13 @@ const hookCommand: Command = {
   usage: "agent-worktree hook",
   summary: "handle a Claude Code WorktreeCreate or WorktreeRemove event read from stdin",
   options: {},
-  run(positionals) {
+  async run(positionals) {
     noPositionals(positionals, this);
     const current = project(process.cwd());
     const { event, name } = parseHookEvent(current, readFileSync(0, "utf8"));
     switch (event) {
       case "WorktreeCreate":
-        return [create(current, name)];
+        return [await create(current, name)];
       case "WorktreeRemove":
         return [removed(remove(current, name, true))];
       default:

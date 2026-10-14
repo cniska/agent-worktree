@@ -13,7 +13,7 @@ import { refuser, systemErrorCode } from "./coded-error";
 import { directoryEntries } from "./directory";
 import { note } from "./log";
 import { dataDir } from "./paths";
-import { type Block, blocks, blockText, isBound, parseBlock, RANGE } from "./ports";
+import { type Block, blocks, blockText, isInUse, parseBlock, RANGE } from "./ports";
 import { type Project, storedName, type WorktreeName } from "./project";
 
 export type Entry = { readonly name: WorktreeName; readonly ready: boolean; readonly block: Block | null };
@@ -31,7 +31,7 @@ const refuse = refuser<{
 }>({
   no_free_ports: {
     message: ({ name }) =>
-      `no port block from ${RANGE} is free for ${name}: worktrees hold some and other programs bind the rest; setup is pending`,
+      `no port block from ${RANGE} is free for ${name}: worktrees hold some and other programs listen on the rest; setup is pending`,
     resolve: () =>
       "remove a worktree you are done with, or run agent-worktree prune to free the blocks of worktrees that are gone, then run the command again",
   },
@@ -129,14 +129,14 @@ function placeClaim(block: Block, holder: string): boolean {
   }
 }
 
-export function claimBlock(project: Project, name: WorktreeName): Block {
+export async function claimBlock(project: Project, name: WorktreeName): Promise<Block> {
   const held = blockOf(project, name);
   if (held !== null) return held;
   const holder = entryDir(project, name);
   for (const block of blocks()) {
     const taken = holderAt(claimFile(block));
     if (taken === holder) return block;
-    if (taken !== null || isBound(block)) continue;
+    if (taken !== null || (await isInUse(block))) continue;
     if (placeClaim(block, holder)) {
       note(`port block ${blockText(block)} for ${name}`);
       return block;

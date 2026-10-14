@@ -8,11 +8,9 @@ const FIRST_BLOCK = 24000;
 
 const BLOCK_COUNT = 100;
 
-const PROBED_HOSTS = ["127.0.0.1", "0.0.0.0", "::1", "::"] as const;
+const PROBED_HOSTS = ["127.0.0.1", "::1"] as const;
 
-const BOUND = "EADDRINUSE";
-
-const HOST_WITHOUT_FAMILY = new Set(["EADDRNOTAVAIL", "EAFNOSUPPORT"]);
+const NO_LISTENER = new Set(["ECONNREFUSED", "EADDRNOTAVAIL", "EAFNOSUPPORT", "ENETUNREACH"]);
 
 const DIGITS = /^[1-9]\d*$/;
 
@@ -21,7 +19,7 @@ const fault = faulter<{
 }>({
   port_probe_failed: {
     message: ({ host, port, detail }) =>
-      `listening on ${host} port ${port} to see whether it is free failed: ${detail}`,
+      `connecting to ${host} port ${port} to see whether it is in use failed: ${detail}`,
     resolve: () => BUG,
   },
 });
@@ -51,20 +49,19 @@ export function blockText(block: Block): string {
   return `${block}-${block + BLOCK_WIDTH - 1}`;
 }
 
-function boundOn(hostname: string, port: number): boolean {
+async function listenedOn(hostname: string, port: number): Promise<boolean> {
   try {
-    Bun.listen({ hostname, port, socket: { data() {} } }).stop(true);
-    return false;
+    (await Bun.connect({ hostname, port, socket: { data() {} } })).terminate();
+    return true;
   } catch (error) {
     const code = systemErrorCode(error);
-    if (code === BOUND) return true;
-    if (code !== null && HOST_WITHOUT_FAMILY.has(code)) return false;
+    if (code !== null && NO_LISTENER.has(code)) return false;
     throw fault("port_probe_failed", { host: hostname, port, detail: messageOf(error) });
   }
 }
 
-export function isBound(block: Block): boolean {
-  return Array.from({ length: BLOCK_WIDTH }, (_, offset) => block + offset).some((port) =>
-    PROBED_HOSTS.some((host) => boundOn(host, port)),
-  );
+export async function isInUse(block: Block): Promise<boolean> {
+  const ports = Array.from({ length: BLOCK_WIDTH }, (_, offset) => block + offset);
+  const probes = ports.flatMap((port) => PROBED_HOSTS.map((host) => listenedOn(host, port)));
+  return (await Promise.all(probes)).some((listened) => listened);
 }

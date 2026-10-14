@@ -100,7 +100,7 @@ Two agents in one checkout overwrite each other's files, so parallel work needs 
 ### 2.12 Port blocks
 
 - **FR-51** — Setting up a task worktree gives it the lowest free block of 10 consecutive ports from 24000 to 24999, each block starting at a multiple of 10, and records the block in the ledger; a block is never derived from a hash of the worktree's name or path. The primary checkout gets no block, so it keeps the project's default ports. Claiming a block notes `port block <first>-<last> for <name>` on stderr.
-- **FR-52** — A block is free when no worktree of any project on the machine holds it and none of its ports is bound on `127.0.0.1`, `0.0.0.0`, `::1` or `::`; a port another program binds skips its whole block. A worktree holds its block until it is unregistered or a `prune` finds its ledger entry gone (FR-58, FR-59).
+- **FR-52** — A block is free when no worktree of any project on the machine holds it and no program listens on any of its ports; a port in use skips its whole block. A port is in use when a TCP connect to it on `127.0.0.1` or `::1` succeeds, which a listener on `0.0.0.0` or `::` accepts too; agent-worktree never binds a port to probe it. A worktree holds its block until it is unregistered or a `prune` finds its ledger entry gone (FR-58, FR-59).
 - **FR-53** — Two commands claiming at once never get the same block.
 - **FR-54** — With no free block, `create` and `init` are refused as `no_free_ports`, naming `remove` and `prune`; the worktree stays registered with setup pending and no block, and once a block is freed the next `create` or `init` claims one and resumes setup.
 - **FR-55** — `init` in a registered task worktree with no block, such as one an earlier release registered, claims one before setup runs.
@@ -114,7 +114,7 @@ Two agents in one checkout overwrite each other's files, so parallel work needs 
 - **NF-1** — Every command reads the ledger, the filesystem and git afresh; nothing is remembered between commands.
 - **NF-2** — Doing the act a refusal names, then running the command again, does not meet the same refusal.
 - **NF-3** — The tests never read or write the real home: `HOME` and the XDG directories point at scratch directories.
-- **NF-4** — agent-worktree needs no network; it only listens on a local port for a moment to see whether it is free (FR-52).
+- **NF-4** — agent-worktree needs no network; it only connects to the machine's own loopback addresses to see whether a port is in use (FR-52).
 
 ## 4. Out of scope
 
@@ -158,7 +158,7 @@ Two agents in one checkout overwrite each other's files, so parallel work needs 
 - **AC-29** — `create` through `bin/agent-worktree` with a setup script that records its environment: the caller's environment and the FR-33 variables, nothing else. (FR-33)
 - **AC-30** — `create task-a` and `task-b`: setup gets the first two free blocks as `WORKTREE_PORT`, and `ls` shows each as `<first>-<last>`, and `create` notes the block it claims; `init` in the primary with `WORKTREE_PORT` inherited: setup gets it unset. (FR-33, FR-51, FR-56, FR-57)
 - **AC-31** — `remove task-a`: its teardown gets its block, and the next `create` gets that block again. (FR-51, FR-58)
-- **AC-32** — Hold one port of the lowest free block in another program, then `create`: the worktree gets the next block. (FR-52)
+- **AC-32** — Another program listens on a port of the lowest free block on `0.0.0.0` and on a port of the next on `::`, then `create`: the worktree gets the third block, and each program accepted a connection. (FR-52)
 - **AC-33** — A second clone creates a worktree in the same data directory: it gets the next block; delete the first clone and `prune` in the second: it notes the block freed, and the next `create` there gets the first clone's block. (FR-52, FR-59)
 - **AC-34** — Several `create`s started at once: each worktree gets a different block. (FR-53)
 - **AC-35** — Hold a port in every free block, then `create`: `no_free_ports` with the worktree `setup pending` and no block; free them and rerun: setup gets the lowest block and it reads `ready`. (FR-54, NF-2)
@@ -191,6 +191,7 @@ Two agents in one checkout overwrite each other's files, so parallel work needs 
 - A worktree in the earlier location is refused, not handled where it is; agent-worktree never moves one itself (FR-42).
 - The `WorktreeRemove` hook removes with force, since Claude Code removes a worktree only when its session is done with it (FR-37).
 - Port blocks start at 24000, below the ephemeral ranges of Linux (from 32768) and macOS (from 49152) and Kubernetes' node ports (30000 to 32767), and apart from ranges a project keeps for itself, such as Hoodly's from 47000 (FR-51).
+- A port is probed by connecting on loopback, never by binding it: binding `0.0.0.0` or `::` can raise the macOS firewall prompt on every `create`, in front of an agent nobody is watching (FR-52).
 - Blocks are allocated across every project on the machine, not per clone, since ports are the machine's: two clones allocating apart would both take 24000 (FR-52).
 
 ## 9. Open questions and known gaps
