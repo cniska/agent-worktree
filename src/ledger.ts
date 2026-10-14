@@ -133,8 +133,10 @@ export function claimBlock(project: Project, name: WorktreeName): Block {
   if (held !== null) return held;
   const holder = entryDir(project, name);
   for (const block of blocks()) {
-    if (existsSync(claimFile(block)) || isBound(block)) continue;
-    if (placeClaim(block, holder)) return block;
+    const taken = holderAt(claimFile(block));
+    if (taken === holder) return block;
+    if (taken !== null || isBound(block)) continue;
+    if (placeClaim(block, holder) || holderAt(claimFile(block)) === holder) return block;
   }
   throw refuse("no_free_ports", { name });
 }

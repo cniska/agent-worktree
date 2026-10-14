@@ -100,7 +100,7 @@ Two agents in one checkout overwrite each other's files, so parallel work needs 
 ### 2.12 Port blocks
 
 - **FR-51** — Setting up a task worktree gives it the lowest free block of 10 consecutive ports from 24000 to 24999, each block starting at a multiple of 10, and records the block in the ledger; a block is never derived from a hash of the worktree's name or path. The primary checkout gets no block, so it keeps the project's default ports.
-- **FR-52** — A block is free when no registered worktree of any project on the machine holds it and none of its ports is bound on `127.0.0.1`, `0.0.0.0`, `::1` or `::`; a port another program binds skips its whole block.
+- **FR-52** — A block is free when no worktree of any project on the machine holds it and none of its ports is bound on `127.0.0.1`, `0.0.0.0`, `::1` or `::`; a port another program binds skips its whole block. A worktree holds its block until it is unregistered or a `prune` finds its ledger entry gone (FR-58, FR-59).
 - **FR-53** — Two commands claiming at once never get the same block.
 - **FR-54** — With no free block, `create` and `init` are refused as `no_free_ports`, naming `remove` and `prune`; the worktree stays registered with setup pending and no block, and once a block is freed the next `create` or `init` claims one and resumes setup.
 - **FR-55** — `init` in a registered task worktree with no block, such as one an earlier release registered, claims one before setup runs.
