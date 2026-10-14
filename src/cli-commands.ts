@@ -62,12 +62,13 @@ const NOTHING_LISTED = "no task worktrees";
 
 const NO_BLOCK = "-";
 
-function portsText(block: Listed["block"]): string {
-  return block === null ? NO_BLOCK : blockText(block);
+function portsText(state: Listed["state"]): string {
+  if (state.kind === "unmanaged" || state.block === null) return NO_BLOCK;
+  return blockText(state.block);
 }
 
-function listedLine({ path, state, block }: Listed): string {
-  return [state.name, stateText(state), branchText(state), portsText(block), path].join("\t");
+function listedLine({ path, state }: Listed): string {
+  return [state.name, stateText(state), branchText(state), portsText(state), path].join("\t");
 }
 
 const createCommand: Command = {

@@ -1,8 +1,8 @@
-import { BUG, faulter, messageOf } from "./coded-error";
+import { BUG, faulter, messageOf, systemErrorCode } from "./coded-error";
 
 export type Block = number & { readonly __brand: "Block" };
 
-export const BLOCK_WIDTH = 10;
+const BLOCK_WIDTH = 10;
 
 const FIRST_BLOCK = 24000;
 
@@ -51,16 +51,12 @@ export function blockText(block: Block): string {
   return `${block}-${block + BLOCK_WIDTH - 1}`;
 }
 
-function errorCode(error: unknown): string | null {
-  return error instanceof Error && "code" in error && typeof error.code === "string" ? error.code : null;
-}
-
 function boundOn(hostname: string, port: number): boolean {
   try {
     Bun.listen({ hostname, port, socket: { data() {} } }).stop(true);
     return false;
   } catch (error) {
-    const code = errorCode(error);
+    const code = systemErrorCode(error);
     if (code === BOUND) return true;
     if (code !== null && HOST_WITHOUT_FAMILY.has(code)) return false;
     throw fault("port_probe_failed", { host: hostname, port, detail: messageOf(error) });

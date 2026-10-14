@@ -36,6 +36,10 @@ export const refuser = coder("refusal");
 
 export const faulter = coder("fault");
 
+export function systemErrorCode(error: unknown): string | null {
+  return error instanceof Error && "code" in error && typeof error.code === "string" ? error.code : null;
+}
+
 export function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }

@@ -38,8 +38,12 @@ describe("create", () => {
     expect(list(f.project)).toEqual([
       {
         path,
-        state: { kind: "ready", name: f.name("task-a"), worktree: { path, branch: "task-a", locked: false } },
-        block: f.firstFreeBlock,
+        state: {
+          kind: "ready",
+          name: f.name("task-a"),
+          worktree: { path, branch: "task-a", locked: false },
+          block: f.firstFreeBlock,
+        },
       },
     ]);
   });
@@ -129,9 +133,7 @@ describe("create", () => {
     writeFileSync(path, "not a dir");
     writeFileSync(join(dirname(path), ".DS_Store"), "");
     expect(refusal(() => create(f.project, f.name("task-e"))).code).toBe("unmanaged");
-    expect(list(f.project)).toEqual([
-      { path, state: { kind: "unmanaged", name: "task-e", worktree: null }, block: null },
-    ]);
+    expect(list(f.project)).toEqual([{ path, state: { kind: "unmanaged", name: "task-e", worktree: null } }]);
   });
 
   test("a registered name whose path is a file reads as unlisted everywhere", () => {
@@ -140,7 +142,7 @@ describe("create", () => {
     const path = create(f.project, name);
     git(f.dir, ["worktree", "remove", "--force", path]);
     writeFileSync(path, "not a dir");
-    expect(list(f.project)).toEqual([{ path, state: { kind: "unlisted", name }, block: f.firstFreeBlock }]);
+    expect(list(f.project)).toEqual([{ path, state: { kind: "unlisted", name, block: f.firstFreeBlock } }]);
     expect(refusal(() => create(f.project, name)).code).toBe("not_a_worktree");
   });
 
@@ -170,8 +172,12 @@ describe("create", () => {
     expect(list(f.project)).toEqual([
       {
         path,
-        state: { kind: "orphaned", name, worktree: { path, branch: "task-a", locked: false } },
-        block: f.firstFreeBlock,
+        state: {
+          kind: "orphaned",
+          name,
+          worktree: { path, branch: "task-a", locked: false },
+          block: f.firstFreeBlock,
+        },
       },
     ]);
     expect(refusal(() => create(f.project, name)).code).toBe("orphaned");
@@ -190,7 +196,7 @@ describe("create", () => {
     expect(refused.resolve).toBe("remove the directory, then agent-worktree prune");
     expect(existsSync(f.setupRecord)).toBe(false);
     expect(refusal(() => remove(f.project, name, true)).code).toBe("not_a_worktree");
-    expect(list(f.project)).toEqual([{ path, state: { kind: "unlisted", name }, block: f.firstFreeBlock }]);
+    expect(list(f.project)).toEqual([{ path, state: { kind: "unlisted", name, block: f.firstFreeBlock } }]);
   });
 
   test("a name differing only in case from an existing one is refused before anything is written", () => {
@@ -205,8 +211,12 @@ describe("create", () => {
     expect(list(f.project)).toEqual([
       {
         path,
-        state: { kind: "ready", name: f.name("task-a"), worktree: { path, branch: "task-a", locked: false } },
-        block: f.firstFreeBlock,
+        state: {
+          kind: "ready",
+          name: f.name("task-a"),
+          worktree: { path, branch: "task-a", locked: false },
+          block: f.firstFreeBlock,
+        },
       },
     ]);
   });
@@ -224,7 +234,7 @@ describe("remove", () => {
       expect(remove(f.project, f.name("task-a"), false).path).toBe(path);
       expect(existsSync(path)).toBe(false);
       expect(list(f.project)).toEqual([
-        { path: stray, state: { kind: "unmanaged", name: "Task-A", worktree: null }, block: null },
+        { path: stray, state: { kind: "unmanaged", name: "Task-A", worktree: null } },
       ]);
     },
   );
@@ -345,7 +355,7 @@ describe("remove", () => {
     remove(f.project, name, true);
     expect(existsSync(path)).toBe(false);
     expect(list(f.project)).toEqual([
-      { path, state: { kind: "orphaned", name, worktree: null }, block: f.firstFreeBlock },
+      { path, state: { kind: "orphaned", name, worktree: null, block: f.firstFreeBlock } },
     ]);
   });
 
@@ -531,8 +541,8 @@ describe("a worktree in the earlier location", () => {
           kind: "legacy",
           name: f.name("task-a"),
           worktree: { path: old, branch: "task-a", locked: false },
+          block: null,
         },
-        block: null,
       },
     ]);
   });
@@ -616,7 +626,9 @@ function portRecord(f: Fixture): readonly string[] {
 }
 
 function blockOf(f: Fixture, name: string): Block | null | undefined {
-  return list(f.project).find((item) => item.state.name === name)?.block;
+  const state = list(f.project).find((item) => item.state.name === name)?.state;
+  if (state === undefined) return undefined;
+  return state.kind === "unmanaged" ? null : state.block;
 }
 
 function freeBlocks(): readonly Block[] {

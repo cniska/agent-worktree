@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { accessSync, constants, lstatSync } from "node:fs";
 import { join } from "node:path";
-import { refuser } from "./coded-error";
+import { refuser, systemErrorCode } from "./coded-error";
 import { type Exit, exitOf } from "./exit";
 import { note } from "./log";
 import type { Block } from "./ports";
@@ -35,12 +35,8 @@ const refuse = refuser<{
 const NOT_EXECUTABLE = new Set(["EACCES", "ENOENT", "ENOTDIR", "ELOOP"]);
 
 function isAccessRefusal(error: unknown): boolean {
-  return (
-    error instanceof Error &&
-    "code" in error &&
-    typeof error.code === "string" &&
-    NOT_EXECUTABLE.has(error.code)
-  );
+  const code = systemErrorCode(error);
+  return code !== null && NOT_EXECUTABLE.has(code);
 }
 
 function isExecutable(path: string): boolean {

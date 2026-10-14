@@ -35,22 +35,22 @@ import {
 } from "./project";
 import { runScript, SETUP, scriptIn, TEARDOWN } from "./scripts";
 
-type Registered =
-  | { readonly kind: "orphaned"; readonly name: WorktreeName; readonly worktree: Worktree | null }
-  | { readonly kind: "unlisted"; readonly name: WorktreeName }
-  | { readonly kind: "legacy"; readonly name: WorktreeName; readonly worktree: Worktree }
-  | { readonly kind: "pending"; readonly name: WorktreeName; readonly worktree: Worktree }
-  | { readonly kind: "ready"; readonly name: WorktreeName; readonly worktree: Worktree };
+type Held = { readonly name: WorktreeName; readonly block: Block | null };
+
+type Registered = Held &
+  (
+    | { readonly kind: "orphaned"; readonly worktree: Worktree | null }
+    | { readonly kind: "unlisted" }
+    | { readonly kind: "legacy"; readonly worktree: Worktree }
+    | { readonly kind: "pending"; readonly worktree: Worktree }
+    | { readonly kind: "ready"; readonly worktree: Worktree }
+  );
 
 type Unmanaged = { readonly kind: "unmanaged"; readonly name: string; readonly worktree: Worktree | null };
 
 type State = { readonly kind: "absent" } | Unmanaged | Registered;
 
-export type Listed = {
-  readonly path: string;
-  readonly state: Unmanaged | Registered;
-  readonly block: Block | null;
-};
+export type Listed = { readonly path: string; readonly state: Unmanaged | Registered };
 
 const refuse = refuser<{
   readonly case_collision: { readonly name: string; readonly existing: string };
@@ -137,11 +137,11 @@ function lastListed(project: Project, name: WorktreeName, listed: Listing): Work
   return listed.get(worktreePath(project, name)) ?? listed.get(legacyPath(project, name)) ?? null;
 }
 
-function goneState(project: Project, name: WorktreeName, listed: Listing): Registered {
-  const worktree = lastListed(project, name, listed);
-  if (worktree !== null && worktree.path !== worktreePath(project, name))
-    return { kind: "legacy", name, worktree };
-  return { kind: "orphaned", name, worktree };
+function goneState(project: Project, held: Held, listed: Listing): Registered {
+  const worktree = lastListed(project, held.name, listed);
+  if (worktree !== null && worktree.path !== worktreePath(project, held.name))
+    return { kind: "legacy", ...held, worktree };
+  return { kind: "orphaned", ...held, worktree };
 }
 
 function registeredState(
@@ -151,10 +151,10 @@ function registeredState(
   worktree: Worktree | null,
   listed: Listing,
 ): Registered {
-  const { name } = registered;
-  if (!present) return goneState(project, name, listed);
-  if (worktree === null) return { kind: "unlisted", name };
-  return { kind: registered.ready ? "ready" : "pending", name, worktree };
+  const held: Held = { name: registered.name, block: registered.block };
+  if (!present) return goneState(project, held, listed);
+  if (worktree === null) return { kind: "unlisted", ...held };
+  return { kind: registered.ready ? "ready" : "pending", ...held, worktree };
 }
 
 type Snapshot = {
@@ -311,8 +311,7 @@ export function list(project: Project): readonly Listed[] {
     .map((name) => {
       const state = stateIn(snap, project, name);
       invariant(state.kind !== "absent", `${name} is in the snapshot`);
-      const block = snap.entries.find((item) => item.name === name)?.block ?? null;
-      return { path: pathOf(project, state), state, block };
+      return { path: pathOf(project, state), state };
     })
     .sort(byName);
 }

@@ -9,7 +9,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
-import { refuser } from "./coded-error";
+import { refuser, systemErrorCode } from "./coded-error";
 import { directoryEntries } from "./directory";
 import { dataDir } from "./paths";
 import { type Block, blocks, isBound, parseBlock, RANGE } from "./ports";
@@ -56,15 +56,11 @@ function claimFile(block: Block): string {
   return join(claimsDir(), String(block));
 }
 
-function errorCode(error: unknown): string | null {
-  return error instanceof Error && "code" in error && typeof error.code === "string" ? error.code : null;
-}
-
 function holderAt(file: string): string | null {
   try {
     return readFileSync(file, "utf8");
   } catch (error) {
-    if (errorCode(error) === GONE) return null;
+    if (systemErrorCode(error) === GONE) return null;
     throw error;
   }
 }
@@ -125,7 +121,7 @@ function placeClaim(block: Block, holder: string): boolean {
     linkSync(written, claimFile(block));
     return true;
   } catch (error) {
-    if (errorCode(error) === ALREADY_EXISTS) return false;
+    if (systemErrorCode(error) === ALREADY_EXISTS) return false;
     throw error;
   } finally {
     rmSync(staging, { recursive: true, force: true });
@@ -156,7 +152,7 @@ function setAside(block: Block): string | null {
     return moved;
   } catch (error) {
     rmSync(dirname(moved), { recursive: true, force: true });
-    if (errorCode(error) === GONE) return null;
+    if (systemErrorCode(error) === GONE) return null;
     throw error;
   }
 }
@@ -165,7 +161,7 @@ function putBack(block: Block, moved: string): void {
   try {
     linkSync(moved, claimFile(block));
   } catch (error) {
-    if (errorCode(error) !== ALREADY_EXISTS) throw error;
+    if (systemErrorCode(error) !== ALREADY_EXISTS) throw error;
   }
 }
 
