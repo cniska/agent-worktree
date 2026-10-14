@@ -4,6 +4,7 @@ import { join } from "node:path";
 import {
   hookEvent,
   ls,
+  PLUGIN,
   pluginCommand,
   project,
   refused,
@@ -15,8 +16,6 @@ import {
 } from "./harness";
 
 afterEach(removeScratch);
-
-const PLUGIN = join(import.meta.dir, "..", "plugin");
 
 test("AC-18 hook creates on WorktreeCreate and force-removes on WorktreeRemove", () => {
   const w = world();

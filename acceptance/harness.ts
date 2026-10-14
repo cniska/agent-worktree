@@ -77,7 +77,7 @@ export function run(w: World, cwd: string, args: readonly string[], options: Run
   return spawn(w, cwd, [process.execPath, ENTRY, ...args], options);
 }
 
-const PLUGIN = join(import.meta.dir, "..", "plugin");
+export const PLUGIN = join(import.meta.dir, "..", "plugin");
 
 export function pluginCommand(w: World, cwd: string, command: string, stdin = ""): Ran {
   const bin = join(w.root, "bin");
