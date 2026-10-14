@@ -16,7 +16,7 @@ cd agent-worktree
 mise trust && mise install
 ```
 
-`mise install` installs Bun and the dependencies, and puts `agent-worktree` in `~/.bun/bin` with `bun link`. Add that directory to your `PATH` if it is not there yet.
+`mise install` installs Bun and the dependencies, and in the clone, never in a worktree, puts `agent-worktree` in `~/.bun/bin` with `bun link`, so removing a worktree never leaves the command pointing at a deleted checkout. Add that directory to your `PATH` if it is not there yet.
 
 Then install the Claude Code plugin:
 

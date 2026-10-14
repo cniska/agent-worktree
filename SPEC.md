@@ -146,7 +146,7 @@ Two agents in one checkout overwrite each other's files, so parallel work needs 
 
 ## 6. Deliverables
 
-- **D-1** — The `agent-worktree` CLI, run by Bun from a checkout and linked onto `PATH` by `mise install`.
+- **D-1** — The `agent-worktree` CLI, run by Bun from a checkout and linked onto `PATH` by `mise install` in the primary checkout, never in a worktree.
 - **D-2** — The `cniska-worktree` Claude Code plugin in `plugin/`.
 - **D-3** — `README.md`, `AGENTS.md`, `src/README.md` and this spec.
 - **D-4** — The test suite, run by `bun run check`, and the acceptance suite, run by `bun run acceptance`, whose test names cite the criteria in §5.
