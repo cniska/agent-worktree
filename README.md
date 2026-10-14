@@ -1,6 +1,6 @@
 # agent-worktree
 
-Task worktrees for coding agents, so agents working in parallel never share a checkout: one task, one checkout, set up and torn down by the project's own scripts. What a checkout needs, and installing it, is left to those scripts, `scripts/worktree-setup.sh` and `scripts/worktree-teardown.sh`.
+Task worktrees, so coding agents working in parallel never share a checkout: each task gets its own, set up and torn down by the project's own scripts. agent-worktree never works out, writes or installs what a checkout needs; the project's `scripts/worktree-setup.sh` and `scripts/worktree-teardown.sh` do.
 
 - `agent-worktree create <name>` makes a git worktree outside the repository, runs the project's setup script in it, and prints its path.
 - `agent-worktree remove <name>` runs the project's teardown script and removes the worktree, keeping the branch.

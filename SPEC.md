@@ -1,6 +1,6 @@
 # agent-worktree Specification
 
-> Task worktrees for coding agents, so agents working in parallel never share a checkout: one task, one checkout, set up and torn down by the project's own scripts.
+> Task worktrees, so coding agents working in parallel never share a checkout: each task gets its own, set up and torn down by the project's own scripts.
 
 This document states what must hold, not how. [`README.md`](README.md) has the install and the commands, and [`src/README.md`](src/README.md) maps the modules that meet these requirements.
 
