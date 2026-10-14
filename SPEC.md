@@ -157,6 +157,7 @@ Two agents in one checkout overwrite each other's files, so parallel work needs 
 - **C-1** — TypeScript on Bun, which mise installs.
 - **C-2** — Task checkouts are git worktrees of the primary checkout.
 - **C-3** — The plugin brings neither Bun nor the CLI.
+- **C-4** — A project's scripts are plain shell that run without agent-worktree, needing nothing beyond the directory FR-32 names and the variables FR-33 lists.
 
 ## 8. Open decisions (left to the builder)
 
@@ -174,6 +175,10 @@ Two agents in one checkout overwrite each other's files, so parallel work needs 
 Known gaps, where the code does not yet meet a requirement:
 
 - **A whitespace `HOME`.** With `XDG_DATA_HOME` unset and `HOME` only spaces, the data directory is under the spaces as a relative path, not under the account's home (FR-3); AC-2's test covers only an unset and an empty `HOME`.
+
+Not proven by a criterion:
+
+- **C-4.** It constrains each project's scripts, which belong to the project; agent-worktree runs them and never reads them.
 
 Open questions:
 

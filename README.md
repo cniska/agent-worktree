@@ -40,6 +40,15 @@ Releases before this one made worktrees at `<primary>/.claude/worktrees/<name>`.
 
 Any git repository works as it is. A project whose worktrees need more than a checkout adds `scripts/worktree-setup.sh`, `scripts/worktree-teardown.sh`, or both. [`SPEC.md`](SPEC.md) states what each gets and when it runs (§2.8), and everything else that must hold.
 
+Without the CLI, run the same scripts by hand from the primary checkout, setting any `WORKTREE_*` variable a script reads (§2.8) and skipping one the project lacks:
+
+```bash
+git worktree add ../<name>
+(cd ../<name> && scripts/worktree-setup.sh)
+scripts/worktree-teardown.sh
+git worktree remove ../<name>
+```
+
 ## Commands
 
 | Command | Does |
