@@ -1,4 +1,4 @@
-# agent-gate:no-comments:2
+# agent-gate:no-comments:3
 name: No comments
 
 on:
@@ -29,4 +29,4 @@ jobs:
           if ! git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null && [ "$PUSHED_REF" != "refs/heads/$DEFAULT_BRANCH" ]; then
             BASE_SHA="origin/$DEFAULT_BRANCH"
           fi
-          node .githooks/no-comments/scan.cjs "$BASE_SHA" "$HEAD_SHA"
+          node .githooks/no-comments/scan.cjs --format github "$BASE_SHA" "$HEAD_SHA"
