@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { mkdirSync } from "node:fs";
-import { join } from "node:path";
-import { parseName, project } from "./project";
+import { basename, dirname, join } from "node:path";
+import { nameAt, parseName, project, worktreePath, worktreesDir } from "./project";
 import { git, projectAt, refusal, removeScratchDirs, repo, scratchDir } from "./repo.test-support";
 
 afterAll(removeScratchDirs);
@@ -45,5 +45,40 @@ describe("parseName", () => {
     const refused = refusal(() => parseName(projectAt(repo()), raw));
     expect(refused.code).toBe("invalid_name");
     expect(refused.message).toBe(`${raw} is not a worktree name`);
+  });
+});
+
+describe("worktreesDir", () => {
+  test("is one key under the data directory, the same from the primary and from its worktrees", () => {
+    const dir = repo();
+    const worktree = join(dir, ".claude", "worktrees", "task-a");
+    git(dir, ["worktree", "add", "-q", worktree, "-b", "task-a"]);
+    const key = worktreesDir(project(dir));
+    expect(dirname(key)).toBe(join(process.env.XDG_DATA_HOME ?? "", "agent-worktree"));
+    expect(basename(key)).toMatch(/^repo-[0-9a-f]{8}$/);
+    expect(worktreesDir(project(worktree))).toBe(key);
+    expect(worktreesDir(project(dir))).toBe(key);
+  });
+
+  test("tells apart two clones that share a directory name", () => {
+    const first = repo();
+    const second = repo();
+    expect(basename(first)).toBe(basename(second));
+    expect(worktreesDir(projectAt(first))).not.toBe(worktreesDir(projectAt(second)));
+  });
+
+  test("keeps every worktree outside the primary checkout", () => {
+    const dir = repo();
+    expect(worktreePath(projectAt(dir), "task-a").startsWith(`${dir}/`)).toBe(false);
+  });
+});
+
+describe("nameAt", () => {
+  test("reads a name at its path and at the earlier location inside the primary", () => {
+    const current = projectAt(repo());
+    const name = parseName(current, "task-a");
+    expect(nameAt(current, worktreePath(current, name))).toBe(name);
+    expect(nameAt(current, join(current.primary, ".claude", "worktrees", "task-a"))).toBe(name);
+    expect(nameAt(current, join(current.primary, "elsewhere", "task-a"))).toBeNull();
   });
 });

@@ -2,7 +2,7 @@
 
 Task worktrees for coding agents: one task, one checkout, set up and torn down by the project's own scripts.
 
-- `agent-worktree create <name>` makes a git worktree at `.claude/worktrees/<name>`, runs the project's setup script in it, and prints its path.
+- `agent-worktree create <name>` makes a git worktree outside the repository, runs the project's setup script in it, and prints its path.
 - `agent-worktree remove <name>` runs the project's teardown script and removes the worktree, keeping the branch.
 - The `cniska-worktree` Claude Code plugin sends Claude Code's own worktrees through the same commands.
 
@@ -30,6 +30,12 @@ Two agents in one checkout overwrite each other's files, so parallel work needs 
 
 Claude Code makes worktrees of its own, for EnterWorktree and for subagents with worktree isolation, and does not run the project's own setup for them. It also repoints git's shared `core.hooksPath` when it does, so a `post-checkout` hook is not a reliable place for setup either. agent-worktree owns the whole lifecycle instead: it creates the worktree, runs the project's setup, records whether setup finished, and runs the teardown before the worktree goes.
 
+## Where worktrees live
+
+A task worktree lives at `${XDG_DATA_HOME:-~/.local/share}/agent-worktree/<project>-<hash>/<name>`, outside the primary checkout, so it does not pick up the primary's own config, such as its `mise.toml`. `<project>` is the primary checkout's directory name and `<hash>` is taken from its absolute path, so two clones with one name get their own directories. Run `agent-worktree path <name>` to find one. The record of which worktrees agent-worktree registered, and whether their setup finished, stays with the clone in `.git/agent-worktrees`.
+
+Releases before this one made worktrees at `<primary>/.claude/worktrees/<name>`. `ls` lists such a worktree as `legacy`, and every other command refuses it, naming the two ways out: move it to its new path with `git worktree move` and run `agent-worktree init` in it, or remove it with `git worktree remove` and run `agent-worktree prune`, which runs its teardown.
+
 ## Project contract
 
 Any git repository works as it is. A project whose worktrees need more than a checkout adds `scripts/worktree-setup.sh`, `scripts/worktree-teardown.sh`, or both. [`SPEC.md`](SPEC.md) states what each gets and when it runs (§2.8), and everything else that must hold.
@@ -38,7 +44,7 @@ Any git repository works as it is. A project whose worktrees need more than a ch
 
 | Command | Does |
 | --- | --- |
-| `agent-worktree create <name>` | Create the worktree at `.claude/worktrees/<name>` on branch `<name>`, run setup, print the path. Rerun to resume a failed setup. |
+| `agent-worktree create <name>` | Create the worktree on branch `<name>`, run setup, print the path. Rerun to resume a failed setup. |
 | `agent-worktree init` | Run setup in the current checkout, primary or task worktree. |
 | `agent-worktree remove [--force] <name>` | Run teardown, remove the worktree, keep the branch. Without `--force` a dirty worktree, one with submodules or a failed teardown refuses; a locked worktree always does. |
 | `agent-worktree prune` | Prune git's stale worktree entries and tear down every worktree that is gone but still registered; refuses with the names whose teardown failed. |

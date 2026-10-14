@@ -1,4 +1,5 @@
 import type { Dirent } from "node:fs";
+import { dirname } from "node:path";
 import { invariant, unreachable } from "./assert";
 import { refuser } from "./coded-error";
 import { directoryEntries } from "./directory";
@@ -15,6 +16,7 @@ import {
 import { type Entry, entries, markReady, register, unregister } from "./ledger";
 import {
   isWorktreeName,
+  legacyPath,
   nameAt,
   type Project,
   type WorktreeName,
@@ -26,6 +28,7 @@ import { runScript, SETUP, scriptIn, TEARDOWN } from "./scripts";
 type Registered =
   | { readonly kind: "orphaned"; readonly name: WorktreeName; readonly worktree: Worktree | null }
   | { readonly kind: "unlisted"; readonly name: WorktreeName }
+  | { readonly kind: "legacy"; readonly name: WorktreeName; readonly worktree: Worktree }
   | { readonly kind: "pending"; readonly name: WorktreeName; readonly worktree: Worktree }
   | { readonly kind: "ready"; readonly name: WorktreeName; readonly worktree: Worktree };
 
@@ -48,6 +51,7 @@ const refuse = refuser<{
   readonly teardown_failed: { readonly name: string; readonly exit: Exit };
   readonly teardowns_failed: { readonly names: readonly string[] };
   readonly not_a_managed_checkout: { readonly checkout: string };
+  readonly legacy_location: { readonly name: string; readonly path: string; readonly target: string };
 }>({
   case_collision: {
     message: ({ name, existing }) => `${name} differs only in case from the existing ${existing}`,
@@ -101,10 +105,22 @@ const refuse = refuser<{
     message: ({ checkout }) => `${checkout} is neither the primary checkout nor a registered task worktree`,
     resolve: () => "cd into the primary checkout or a worktree agent-worktree created, and run init there",
   },
+  legacy_location: {
+    message: ({ name, path }) =>
+      `${name} is at ${path}, inside the primary checkout, where agent-worktree no longer keeps worktrees`,
+    resolve: ({ path, target }) =>
+      `keep it with mkdir -p ${dirname(target)} && git worktree move ${path} ${target}, then agent-worktree init in ${target}; or drop it with git worktree remove ${path}, then agent-worktree prune`,
+  },
 });
 
-function registeredState(registered: Entry, present: boolean, worktree: Worktree | null): Registered {
+function registeredState(
+  registered: Entry,
+  present: boolean,
+  worktree: Worktree | null,
+  legacy: Worktree | null,
+): Registered {
   const { name } = registered;
+  if (!present && legacy !== null) return { kind: "legacy", name, worktree: legacy };
   if (!present) return { kind: "orphaned", name, worktree };
   if (worktree === null) return { kind: "unlisted", name };
   return { kind: registered.ready ? "ready" : "pending", name, worktree };
@@ -140,11 +156,15 @@ function stateIn({ found, entries, listed }: Snapshot, project: Project, name: s
   if (registered === null && !present) return { kind: "absent" };
   const worktree = listed.get(path) ?? null;
   if (registered === null) return { kind: "unmanaged", name, worktree };
-  return registeredState(registered, present, worktree);
+  return registeredState(registered, present, worktree, listed.get(legacyPath(project, name)) ?? null);
 }
 
 function stateAt(project: Project, name: WorktreeName): State {
   return stateIn(snapshot(project), project, name);
+}
+
+function legacyRefusal(project: Project, name: WorktreeName, worktree: Worktree) {
+  return refuse("legacy_location", { name, path: worktree.path, target: worktreePath(project, name) });
 }
 
 function setUp(project: Project, name: WorktreeName | null, checkout: string): void {
@@ -187,6 +207,8 @@ export function create(project: Project, name: WorktreeName): string {
       throw refuse("orphaned", { name });
     case "unlisted":
       throw refuse("not_a_worktree", { name, path });
+    case "legacy":
+      throw legacyRefusal(project, name, state.worktree);
     case "absent":
       add(project, name, path, snap);
       break;
@@ -211,6 +233,8 @@ function removable(project: Project, name: WorktreeName): Worktree {
       throw refuse("orphaned", { name });
     case "unlisted":
       throw refuse("not_a_worktree", { name, path });
+    case "legacy":
+      throw legacyRefusal(project, name, state.worktree);
     case "pending":
     case "ready":
       return state.worktree;
@@ -255,7 +279,7 @@ export function list(project: Project): readonly Listed[] {
     .map((name) => {
       const state = stateIn(snap, project, name);
       invariant(state.kind !== "absent", `${name} is in the snapshot`);
-      return { path: worktreePath(project, name), state };
+      return { path: state.kind === "legacy" ? state.worktree.path : worktreePath(project, name), state };
     })
     .sort(byName);
 }
@@ -274,6 +298,8 @@ function managedName(project: Project, checkout: string): WorktreeName | null {
     case "pending":
     case "ready":
       return name;
+    case "legacy":
+      throw legacyRefusal(project, name, state.worktree);
     case "absent":
     case "unmanaged":
     case "orphaned":

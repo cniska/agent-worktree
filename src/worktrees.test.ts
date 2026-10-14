@@ -498,3 +498,84 @@ describe("init", () => {
     );
   });
 });
+
+describe("a worktree in the earlier location", () => {
+  function legacy(f: Fixture, raw: string): string {
+    const path = join(f.dir, ".claude", "worktrees", raw);
+    git(f.dir, ["worktree", "add", "-q", path, "-b", raw]);
+    mkdirSync(join(f.dir, ".git", "agent-worktrees", raw), { recursive: true });
+    writeFileSync(join(f.dir, ".git", "agent-worktrees", raw, "ready"), "");
+    return path;
+  }
+
+  test("is listed where it is", () => {
+    const f = fixture();
+    const old = legacy(f, "task-a");
+    expect(list(f.project)).toEqual([
+      {
+        path: old,
+        state: {
+          kind: "legacy",
+          name: f.name("task-a"),
+          worktree: { path: old, branch: "task-a", locked: false },
+        },
+      },
+    ]);
+  });
+
+  test("refuses create, init and remove, naming how to keep it and how to drop it", () => {
+    const f = fixture();
+    const old = legacy(f, "task-a");
+    const refused = refusal(() => create(f.project, f.name("task-a")));
+    expect(refused.code).toBe("legacy_location");
+    expect(refused.message).toBe(
+      `task-a is at ${old}, inside the primary checkout, where agent-worktree no longer keeps worktrees`,
+    );
+    expect(refused.resolve).toBe(
+      `keep it with mkdir -p ${dirname(f.path("task-a"))} && git worktree move ${old} ${f.path("task-a")}, then agent-worktree init in ${f.path("task-a")}; or drop it with git worktree remove ${old}, then agent-worktree prune`,
+    );
+    expect(refusal(() => init(f.project, old)).code).toBe("legacy_location");
+    expect(refusal(() => remove(f.project, f.name("task-a"), false)).code).toBe("legacy_location");
+    expect(refusal(() => remove(f.project, f.name("task-a"), true)).code).toBe("legacy_location");
+    expect(existsSync(old)).toBe(true);
+  });
+
+  test("is left registered by prune, with no teardown", () => {
+    const f = fixture({ teardown: TOUCH_TEARDOWN_RECORD });
+    legacy(f, "task-a");
+    prune(f.project);
+    expect(stateKind(f, "task-a")).toBe("legacy");
+    expect(existsSync(f.teardownRecord)).toBe(false);
+  });
+
+  test("reads ready where it belongs once moved there and set up again", () => {
+    const f = fixture();
+    const old = legacy(f, "task-a");
+    mkdirSync(dirname(f.path("task-a")), { recursive: true });
+    git(f.dir, ["worktree", "move", old, f.path("task-a")]);
+    init(f.project, f.path("task-a"));
+    expect(recorded(f.setupRecord)).toEqual(["task-a", f.path("task-a"), f.dir, f.path("task-a")]);
+    expect(list(f.project).map((item) => [item.path, item.state.kind])).toEqual([
+      [f.path("task-a"), "ready"],
+    ]);
+  });
+
+  test("is torn down and unregistered by prune once git removed it", () => {
+    const f = fixture({ teardown: TOUCH_TEARDOWN_RECORD });
+    const old = legacy(f, "task-a");
+    git(f.dir, ["worktree", "remove", old]);
+    prune(f.project);
+    expect(existsSync(f.teardownRecord)).toBe(true);
+    expect(list(f.project)).toEqual([]);
+  });
+
+  test("is not one agent-worktree registered when the directory is not", () => {
+    const f = fixture({ teardown: TOUCH_TEARDOWN_RECORD });
+    const stray = join(f.dir, ".claude", "worktrees", "task-a");
+    git(f.dir, ["worktree", "add", "-q", stray, "-b", "task-a"]);
+    prune(f.project);
+    expect(list(f.project)).toEqual([]);
+    expect(existsSync(stray)).toBe(true);
+    expect(existsSync(f.teardownRecord)).toBe(false);
+  });
+});

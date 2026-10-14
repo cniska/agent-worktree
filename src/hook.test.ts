@@ -37,6 +37,15 @@ describe("parseHookEvent", () => {
     ).toEqual({ event: "WorktreeRemove", name: f.name("task-a") });
   });
 
+  test("reads the name from a WorktreeRemove path in the earlier location inside the primary", () => {
+    expect(
+      parseHookEvent(
+        f.project,
+        hookEvent({ hook_event_name: "WorktreeRemove", worktree_path: `${f.dir}/.claude/worktrees/task-a` }),
+      ),
+    ).toEqual({ event: "WorktreeRemove", name: f.name("task-a") });
+  });
+
   test("refuses a WorktreeRemove path that is not the name's conventional one", () => {
     const foreign = `${f.dir}/elsewhere/task-a`;
     const refused = refusal(() =>

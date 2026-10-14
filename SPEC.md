@@ -4,7 +4,7 @@
 
 This document states what must hold, not how. [`README.md`](README.md) has the install and the commands, and [`src/README.md`](src/README.md) maps the modules that meet these requirements.
 
-**Status: reverse-engineered from the code at `1904f2c`, plus the worktree location the owner decided (§2.1, §2.10).** §9 lists what the code does not meet yet.
+**Status: reverse-engineered from the code at `1904f2c`, with the worktree location the owner decided (§2.1, §2.10).** §9 lists the known gaps and open questions.
 
 ## 1. Purpose & context
 
@@ -77,7 +77,7 @@ Two agents in one checkout overwrite each other's files, so parallel work needs 
 
 - **FR-36** — `hook` given a `WorktreeCreate` event on stdin creates the worktree it names, as `create` does, and prints only its path.
 - **FR-37** — `hook` given a `WorktreeRemove` event removes the worktree at its `worktree_path` with force, as `remove --force` does.
-- **FR-38** — A `WorktreeRemove` path that is not where agent-worktree keeps that name's worktree is refused as `foreign_path`.
+- **FR-38** — A `WorktreeRemove` path that is not where agent-worktree keeps that name's worktree, nor a worktree in the earlier location (FR-41), is refused as `foreign_path`.
 - **FR-39** — Stdin that is not a JSON object with the event's string fields is refused as `hook_input`; any other event is refused as `hook_event`.
 - **FR-40** — The `cniska-worktree` plugin runs `agent-worktree hook` for `WorktreeCreate` and `WorktreeRemove`, and adds a note when a session starts, resumes, clears or compacts telling the agent to create and remove worktrees with the CLI.
 
@@ -86,7 +86,7 @@ Two agents in one checkout overwrite each other's files, so parallel work needs 
 - **FR-41** — A registered worktree that git lists at `<primary>/.claude/worktrees/<name>`, where earlier releases created them, and that has nothing at its FR-1 path, is listed by `ls` at that path in the state `legacy`.
 - **FR-42** — `create`, `init`, `remove` and the `WorktreeRemove` hook on it are refused as `legacy_location`, naming two acts: keep it, by making its FR-1 path's parent, moving it there with `git worktree move` and running `init` in it; or drop it, with `git worktree remove` and then `prune`.
 - **FR-43** — `prune` leaves a worktree in the earlier location registered and runs no teardown for it.
-- **FR-44** — After the keep act, the worktree reads as it did before at its FR-1 path; after the drop act, its teardown has run and it is unregistered.
+- **FR-44** — After the keep act, the worktree reads `ready` at its FR-1 path; after the drop act, its teardown has run and it is unregistered.
 - **FR-45** — A directory under `<primary>/.claude/worktrees` that is not registered is not agent-worktree's: `ls` does not list it and no command touches it.
 
 ### 2.11 Output and errors
@@ -171,7 +171,6 @@ Two agents in one checkout overwrite each other's files, so parallel work needs 
 
 Known gaps, where the code does not yet meet a requirement:
 
-- **FR-1 to FR-6, FR-41 to FR-45, NF-3.** The code still creates worktrees at `<primary>/.claude/worktrees/<name>`, and the tests leave `HOME` and the XDG directories as the caller set them.
 - **AC citations.** No check ties the tests to these criteria; the tests name behavior, not IDs.
 
 Open questions:

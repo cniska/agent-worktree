@@ -72,10 +72,10 @@ describe("the cli", () => {
   });
 
   test("prints a result on stdout and exits 0", () => {
-    const dir = repo();
+    const { dir, path } = fixture();
     expect(cli(dir, ["path", "task-a"])).toEqual({
       status: 0,
-      stdout: `${dir}/.claude/worktrees/task-a\n`,
+      stdout: `${path("task-a")}\n`,
       stderr: "",
     });
   });

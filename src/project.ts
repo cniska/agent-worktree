@@ -1,7 +1,9 @@
+import { createHash } from "node:crypto";
 import { basename, dirname, join } from "node:path";
 import { invariant } from "./assert";
 import { refuser } from "./coded-error";
 import { revParse, validBranchName } from "./git";
+import { dataDir } from "./paths";
 
 export type Project = { readonly primary: string; readonly commonDir: string };
 
@@ -73,15 +75,27 @@ export function parseName(project: Project, raw: string): WorktreeName {
   return name;
 }
 
+const KEY_HASH_LENGTH = 8;
+
+function projectKey(project: Project): string {
+  const hash = createHash("sha256").update(project.primary).digest("hex").slice(0, KEY_HASH_LENGTH);
+  return `${basename(project.primary)}-${hash}`;
+}
+
 export function worktreesDir(project: Project): string {
-  return join(project.primary, ".claude", "worktrees");
+  return join(dataDir(), projectKey(project));
 }
 
 export function worktreePath(project: Project, segment: string): string {
   return join(worktreesDir(project), segment);
 }
 
+export function legacyPath(project: Project, segment: string): string {
+  return join(project.primary, ".claude", "worktrees", segment);
+}
+
 export function nameAt(project: Project, path: string): WorktreeName | null {
   const name = nameOrNull(project, basename(path));
-  return name !== null && worktreePath(project, name) === path ? name : null;
+  if (name === null) return null;
+  return path === worktreePath(project, name) || path === legacyPath(project, name) ? name : null;
 }

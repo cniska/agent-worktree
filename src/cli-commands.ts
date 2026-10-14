@@ -41,6 +41,8 @@ function stateText(state: Listed["state"]): string {
       return "orphaned (prune)";
     case "unlisted":
       return "unlisted";
+    case "legacy":
+      return "legacy (move or drop)";
     case "pending":
       return "setup pending";
     case "ready":

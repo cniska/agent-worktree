@@ -96,6 +96,7 @@ const MODULES = [
   "hook",
   "project",
   "ledger",
+  "paths",
   "git",
   "scripts",
   "exit",
