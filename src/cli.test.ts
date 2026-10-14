@@ -107,7 +107,11 @@ describe("the cli", () => {
       ["hook"],
       hookEvent({ hook_event_name: "WorktreeRemove", worktree_path: path("task-a") }),
     );
-    expect(run).toEqual({ status: 0, stdout: "branch task-a kept\n", stderr: "" });
+    expect(run).toEqual({
+      status: 0,
+      stdout: "branch task-a kept, no default branch tracked for origin\n",
+      stderr: "",
+    });
     expect(existsSync(path("task-a"))).toBe(false);
     expect(cli(dir, ["ls"])).toEqual({
       status: 0,

@@ -6,10 +6,15 @@ import { directoryEntries } from "./directory";
 import { describeExit, type Exit, succeeded } from "./exit";
 import {
   addWorktree,
+  branchTip,
+  deleteBranchAt,
   hasSubmodules,
+  isAncestor,
   isDirty,
   pruneWorktrees,
+  remoteDefaultBranch,
   removeWorktree,
+  upstreamRemote,
   type Worktree,
   worktrees,
 } from "./git";
@@ -287,7 +292,50 @@ function removable(project: Project, name: WorktreeName): Worktree {
   }
 }
 
-export function remove(project: Project, name: WorktreeName, force: boolean): Worktree {
+export type BranchFate =
+  | { readonly kind: "detached" }
+  | { readonly kind: "deleted"; readonly branch: string; readonly into: string }
+  | { readonly kind: "unmerged"; readonly branch: string; readonly into: string }
+  | { readonly kind: "no_default_branch"; readonly branch: string; readonly remote: string }
+  | { readonly kind: "checked_out"; readonly branch: string; readonly at: string };
+
+const DEFAULT_REMOTE = "origin";
+
+function settleBranch(project: Project, branch: string | null): BranchFate {
+  if (branch === null) return { kind: "detached" };
+  const elsewhere = worktrees(project.primary).find((tree) => tree.branch === branch);
+  if (elsewhere !== undefined) return { kind: "checked_out", branch, at: elsewhere.path };
+  const remote = upstreamRemote(project.primary, branch) ?? DEFAULT_REMOTE;
+  const into = remoteDefaultBranch(project.primary, remote);
+  if (into === null) return { kind: "no_default_branch", branch, remote };
+  const tip = branchTip(project.primary, branch);
+  if (!isAncestor(project.primary, tip, into)) return { kind: "unmerged", branch, into };
+  deleteBranchAt(project.primary, branch, tip);
+  return { kind: "deleted", branch, into };
+}
+
+function shortRef(ref: string): string {
+  return ref.replace(/^refs\/remotes\//, "");
+}
+
+export function fateText(fate: BranchFate): string {
+  switch (fate.kind) {
+    case "detached":
+      return "detached";
+    case "deleted":
+      return `branch ${fate.branch} deleted, merged into ${shortRef(fate.into)}`;
+    case "unmerged":
+      return `branch ${fate.branch} kept, not merged into ${shortRef(fate.into)}`;
+    case "no_default_branch":
+      return `branch ${fate.branch} kept, no default branch tracked for ${fate.remote}`;
+    case "checked_out":
+      return `branch ${fate.branch} kept, checked out at ${fate.at}`;
+    default:
+      return unreachable(fate);
+  }
+}
+
+export function remove(project: Project, name: WorktreeName, force: boolean): BranchFate {
   const worktree = removable(project, name);
   if (worktree.locked) throw refuse("locked", { name, path: worktree.path });
   if (!force && hasSubmodules(worktree.path)) throw refuse("submodules", { name, path: worktree.path });
@@ -296,7 +344,7 @@ export function remove(project: Project, name: WorktreeName, force: boolean): Wo
   if (failure !== null && !force) throw refuse("teardown_failed", { name, exit: failure });
   removeWorktree(project.primary, worktree.path, force);
   if (failure === null) unregister(project, name);
-  return worktree;
+  return settleBranch(project, worktree.branch);
 }
 
 export function prune(project: Project): void {
@@ -305,8 +353,9 @@ export function prune(project: Project): void {
   const failed: string[] = [];
   for (const { state } of list(project)) {
     if (state.kind !== "orphaned") continue;
-    const path = lastListed(project, state.name, before)?.path ?? null;
-    if (!reap(project, state.name, path)) failed.push(state.name);
+    const dropped = lastListed(project, state.name, before);
+    if (!reap(project, state.name, dropped?.path ?? null)) failed.push(state.name);
+    if (dropped !== null && dropped.branch !== null) note(fateText(settleBranch(project, dropped.branch)));
   }
   freeStaleBlocks();
   if (failed.length > 0) throw refuse("teardowns_failed", { names: failed });

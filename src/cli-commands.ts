@@ -1,12 +1,11 @@
 import { readFileSync } from "node:fs";
 import { unreachable } from "./assert";
 import { type Command, usageRefusal } from "./cli-contract";
-import type { Worktree } from "./git";
 import { parseHookEvent } from "./hook";
 import { note } from "./log";
 import { blockText } from "./ports";
 import { checkout, type Project, parseName, project, type WorktreeName, worktreePath } from "./project";
-import { create, init, type Listed, list, prune, remove } from "./worktrees";
+import { create, fateText, init, type Listed, list, prune, remove } from "./worktrees";
 
 function noPositionals(positionals: readonly string[], command: Command): void {
   if (positionals.length > 0)
@@ -28,10 +27,6 @@ function namedTarget(
     );
   const current = project(process.cwd());
   return { project: current, name: parseName(current, raw) };
-}
-
-function removed(worktree: Worktree): string {
-  return worktree.branch === null ? "detached" : `branch ${worktree.branch} kept`;
 }
 
 function stateText(state: Listed["state"]): string {
@@ -98,11 +93,12 @@ const initCommand: Command = {
 const removeCommand: Command = {
   name: "remove",
   usage: "agent-worktree remove [--force] <name>",
-  summary: "run teardown and remove the worktree, keeping its branch",
+  summary:
+    "run teardown and remove the worktree, deleting its branch when its remote's default branch has it",
   options: { force: { type: "boolean" } },
   async run(positionals, values) {
     const target = namedTarget(positionals, this);
-    return [removed(remove(target.project, target.name, values.force === true))];
+    return [fateText(remove(target.project, target.name, values.force === true))];
   },
 };
 
@@ -155,7 +151,7 @@ const hookCommand: Command = {
       case "WorktreeCreate":
         return [await create(current, name)];
       case "WorktreeRemove":
-        return [removed(remove(current, name, true))];
+        return [fateText(remove(current, name, true))];
       default:
         return unreachable(event);
     }

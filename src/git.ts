@@ -78,8 +78,17 @@ export function validBranchName(repo: string, name: string): boolean {
   return succeeded(git(repo, ["check-ref-format", "--branch", name]).exit);
 }
 
+const NOT_FOUND = 1;
+
+function foundOrFault(repo: string, args: readonly string[]): GitRun | null {
+  const run = git(repo, args);
+  if (succeeded(run.exit)) return run;
+  if (run.exit.kind === "exited" && run.exit.status === NOT_FOUND) return null;
+  throw refuse("git_failed", { repo, command: described(args), exit: run.exit, detail: run.err });
+}
+
 function branchExists(repo: string, name: string): boolean {
-  return succeeded(git(repo, ["show-ref", "--verify", "--quiet", `refs/heads/${name}`]).exit);
+  return foundOrFault(repo, ["show-ref", "--verify", "--quiet", `refs/heads/${name}`]) !== null;
 }
 
 export function isDirty(worktree: string): boolean {
@@ -101,6 +110,44 @@ export function addWorktree(repo: string, path: string, branch: string): void {
 
 export function removeWorktree(repo: string, path: string, force: boolean): void {
   gitOrRefusal(repo, ["worktree", "remove", ...(force ? ["--force"] : []), path]);
+}
+
+const LOCAL_REMOTE = ".";
+
+export function upstreamRemote(repo: string, branch: string): string | null {
+  const run = foundOrFault(repo, ["config", "--get", `branch.${branch}.remote`]);
+  if (run === null || run.out === LOCAL_REMOTE) return null;
+  return run.out;
+}
+
+const DEFAULT_BRANCH_CANDIDATES = ["HEAD", "main", "master"] as const;
+
+export function remoteDefaultBranch(repo: string, remote: string): string | null {
+  for (const candidate of DEFAULT_BRANCH_CANDIDATES) {
+    const ref = `refs/remotes/${remote}/${candidate}`;
+    const run = foundOrFault(repo, ["rev-parse", "--verify", "--quiet", "--symbolic-full-name", ref]);
+    if (run !== null) return run.out;
+  }
+  return null;
+}
+
+export function branchTip(repo: string, branch: string): string {
+  return gitOutput(repo, ["rev-parse", "--verify", `refs/heads/${branch}^{commit}`]);
+}
+
+export function isAncestor(repo: string, commit: string, ref: string): boolean {
+  return foundOrFault(repo, ["merge-base", "--is-ancestor", commit, ref]) !== null;
+}
+
+function hasBranchConfig(repo: string, branch: string): boolean {
+  const run = foundOrFault(repo, ["config", "--name-only", "--get-regexp", "^branch\\."]);
+  if (run === null) return false;
+  return run.out.split("\n").some((key) => key.startsWith(`branch.${branch}.`));
+}
+
+export function deleteBranchAt(repo: string, branch: string, tip: string): void {
+  gitOutput(repo, ["update-ref", "-d", `refs/heads/${branch}`, tip]);
+  if (hasBranchConfig(repo, branch)) gitOutput(repo, ["config", "--remove-section", `branch.${branch}`]);
 }
 
 export function pruneWorktrees(repo: string): void {

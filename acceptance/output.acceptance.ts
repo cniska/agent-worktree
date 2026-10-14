@@ -76,7 +76,9 @@ test("AC-25 the usage lists every command, or one with --help", () => {
   expect(run(w, w.root, ["--help"])).toEqual(bare);
   const remove = run(w, w.root, ["remove", "--help"]);
   expect(remove).toEqual({ exitCode: 0, stdout: `${lines[2]}\n`, stderr: "" });
-  expect(remove.stdout).toContain("run teardown and remove the worktree, keeping its branch");
+  expect(remove.stdout).toContain(
+    "run teardown and remove the worktree, deleting its branch when its remote's default branch has it",
+  );
 });
 
 test("AC-26 each command reads state changed on disk since the last", () => {
@@ -104,7 +106,9 @@ test("AC-28 the commands work with the network unavailable", () => {
   expect(succeeded(run(w, p.dir, ["create", "task-a"]))).toEqual([path]);
   expect(succeeded(run(w, path, ["init"]))).toEqual([]);
   expect(ls(w, p.dir)).toEqual([{ name: "task-a", state: "ready", branch: "task-a", path }]);
-  expect(succeeded(run(w, p.dir, ["remove", "task-a"]))).toEqual(["branch task-a kept"]);
+  expect(succeeded(run(w, p.dir, ["remove", "task-a"]))).toEqual([
+    "branch task-a kept, no default branch tracked for origin",
+  ]);
   expect(succeeded(run(w, p.dir, ["prune"]))).toEqual([]);
   const stdin = hookEvent({ hook_event_name: "WorktreeCreate", name: "task-b" });
   expect(succeeded(run(w, p.dir, ["hook"], { stdin }))).toEqual([p.path("task-b")]);

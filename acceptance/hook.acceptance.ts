@@ -32,7 +32,7 @@ test("AC-18 hook creates on WorktreeCreate and force-removes on WorktreeRemove",
   const removed = run(w, path, ["hook"], {
     stdin: hookEvent({ hook_event_name: "WorktreeRemove", worktree_path: path }),
   });
-  expect(succeeded(removed)).toEqual(["branch task-a kept"]);
+  expect(succeeded(removed)).toEqual(["branch task-a kept, no default branch tracked for origin"]);
   expect(existsSync(path)).toBe(false);
   expect(ls(w, p.dir)).toEqual([]);
 });
@@ -117,7 +117,7 @@ test("AC-20 the plugin runs hook for both events and the note on the four sessio
     commandOf("WorktreeRemove"),
     hookEvent({ hook_event_name: "WorktreeRemove", worktree_path: path }),
   );
-  expect(succeeded(removed)).toEqual(["branch task-a kept"]);
+  expect(succeeded(removed)).toEqual(["branch task-a kept, no default branch tracked for origin"]);
   expect(existsSync(path)).toBe(false);
   const [session] = handlers("SessionStart");
   expect(session?.matcher?.split("|").sort()).toEqual(["clear", "compact", "resume", "startup"]);

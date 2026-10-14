@@ -3,7 +3,7 @@
 Task worktrees, so coding agents working in parallel never share a checkout: each task gets its own, set up and torn down by the project's own scripts. agent-worktree never works out, writes or installs what a checkout needs; the project's `scripts/worktree-setup.sh` and `scripts/worktree-teardown.sh` do.
 
 - `agent-worktree create <name>` makes a git worktree outside the repository, runs the project's setup script in it, and prints its path.
-- `agent-worktree remove <name>` runs the project's teardown script and removes the worktree, keeping the branch.
+- `agent-worktree remove <name>` runs the project's teardown script, removes the worktree, and deletes its branch when its remote's default branch has it.
 - The `cniska-worktree` Claude Code plugin sends Claude Code's own worktrees through the same commands.
 
 ## Install
@@ -84,8 +84,8 @@ git worktree remove ../<name>
 | --- | --- |
 | `agent-worktree create <name>` | Create the worktree on branch `<name>`, run setup, print the path. Rerun to resume a failed setup. |
 | `agent-worktree init` | Run setup in the current checkout, primary or task worktree. |
-| `agent-worktree remove [--force] <name>` | Run teardown, remove the worktree, keep the branch. Without `--force` a dirty worktree, one with submodules or a failed teardown refuses; a locked worktree always does. |
-| `agent-worktree prune` | Prune git's stale worktree entries and tear down every worktree that is gone but still registered; refuses with the names whose teardown failed. |
+| `agent-worktree remove [--force] <name>` | Run teardown and remove the worktree. Delete its branch when the tip is reachable from the remote's default branch (`<remote>/HEAD`, else `main`, else `master`; the upstream's remote, else `origin`), judged without a fetch; keep it otherwise, as for a squash merge, no remote or a branch checked out elsewhere, and print which and why. `--force` never deletes an unmerged branch. Without `--force` a dirty worktree, one with submodules or a failed teardown refuses; a locked worktree always does. |
+| `agent-worktree prune` | Prune git's stale worktree entries and tear down every worktree that is gone but still registered, settling each one's branch as `remove` does; refuses with the names whose teardown failed. |
 | `agent-worktree ls` | One line per worktree: name, state, branch, port block, path. |
 | `agent-worktree path <name>` | Print the worktree's path. |
 | `agent-worktree hook` | The plugin's `WorktreeCreate` and `WorktreeRemove` entry: reads the event from stdin. |

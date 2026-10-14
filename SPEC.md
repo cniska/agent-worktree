@@ -49,7 +49,7 @@ Two agents in one checkout overwrite each other's files, so parallel work needs 
 
 ### 2.5 remove
 
-- **FR-22** — `remove <name>` runs teardown, removes the worktree, keeps its branch, unregisters it, and prints the kept branch, or `detached`.
+- **FR-22** — `remove <name>` runs teardown, removes the worktree, unregisters it, and settles its branch. The branch is deleted when its tip is reachable from its remote's default branch: `refs/remotes/<remote>/HEAD`, else `refs/remotes/<remote>/main`, else `refs/remotes/<remote>/master`, where the remote is the branch's upstream remote, else `origin`. The refs are judged as they are, with no fetch. Otherwise the branch is kept: one merged by squash or rebase, whose tip is not reachable; one whose remote tracks none of those refs, as when there is no remote; and one checked out in another worktree. `--force` does not change which branch is deleted. It prints `branch <name> deleted, merged into <remote>/<branch>`, or `branch <name> kept, ` and why, or `detached`.
 - **FR-23** — A worktree with uncommitted or untracked files is refused as `dirty` unless `--force` is given.
 - **FR-24** — A worktree that contains submodules is refused as `submodules` unless `--force` is given.
 - **FR-25** — A locked worktree is refused as `locked`, with or without `--force`.
@@ -58,7 +58,7 @@ Two agents in one checkout overwrite each other's files, so parallel work needs 
 
 ### 2.6 prune
 
-- **FR-28** — `prune` drops git's entries for worktrees whose directory is gone, then runs teardown for every registered worktree whose directory is gone and unregisters it.
+- **FR-28** — `prune` drops git's entries for worktrees whose directory is gone, then runs teardown for every registered worktree whose directory is gone and unregisters it. A branch such a worktree had when git last listed it is settled as FR-22 settles it, and noted on stderr as FR-22 prints it.
 - **FR-29** — A teardown that fails during `prune` leaves that worktree registered, and `prune` is refused as `teardowns_failed`, naming every such worktree.
 
 ### 2.7 ls
@@ -137,7 +137,7 @@ Two agents in one checkout overwrite each other's files, so parallel work needs 
 - **AC-7** — `create` with a failing setup: `setup_failed` and `pending`; fix the script and rerun: setup reruns in the same worktree and it reads `ready`. (FR-15, NF-2)
 - **AC-8** — `create` and `remove` over an unregistered directory, a registered one whose directory is gone, and a registered directory git does not list: `unmanaged` leaving it, `orphaned`, `not_a_worktree`; each converges after its act. (FR-16, FR-17, FR-18, FR-27, NF-2)
 - **AC-9** — `init` in the primary, in a pending task worktree, and in an unregistered worktree: setup without a name even with `WORKTREE_NAME` inherited, setup with the name and `ready`, `not_a_managed_checkout`. (FR-19, FR-20, FR-21, FR-33)
-- **AC-10** — `remove` on a clean worktree: teardown ran in the primary, the worktree is gone, the branch kept, the name unregistered; on a detached one it prints `detached`. (FR-22, FR-32)
+- **AC-10** — `remove` on a clean worktree in a repo with no remote: teardown ran in the primary, the worktree is gone, the branch kept with the reason, the name unregistered; on a detached one it prints `detached`. (FR-22, FR-32)
 - **AC-11** — `remove` on a dirty worktree, one with submodules, and a locked one, each with and without `--force`: `dirty` and `submodules` without force only; `locked` both times. (FR-23, FR-24, FR-25)
 - **AC-12** — `remove` with a failing teardown: `teardown_failed`, worktree kept; with `--force`: removed and `orphaned`; fix teardown and `prune`: unregistered. (FR-26, FR-28)
 - **AC-13** — `remove` of an unregistered name: `not_registered`. (FR-27)
@@ -167,6 +167,7 @@ Two agents in one checkout overwrite each other's files, so parallel work needs 
 - **AC-37** — `remove --force` past a failed teardown: `ls` still shows the block; fix teardown and `prune`: the teardown gets the block, and the next `create` gets it. (FR-58)
 - **AC-38** — Delete a worktree's directory, then `create` another: the gone worktree's teardown gets its block, `create` notes the block freed, the new worktree gets it, and `ls` lists only the new one; with a teardown that fails instead: the gone worktree keeps its block and the new one gets the next. (FR-58, FR-60)
 - **AC-39** — A second clone creates a worktree and is deleted, then `create` in the first, with no `prune`: it notes the block freed and gets it. (FR-59, FR-60)
+- **AC-40** — With a local bare repository as `origin` and no network: `remove` of a worktree whose branch `origin/main` has deletes the branch; `remove --force` of one with an unpushed commit keeps it, naming `origin/main`; `prune` after two worktrees are deleted by hand deletes the merged branch and keeps the squash-merged one, noting each. (FR-22, FR-28)
 
 ## 6. Deliverables
 

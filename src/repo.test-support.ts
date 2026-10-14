@@ -48,6 +48,14 @@ export function repo(): string {
   return dir;
 }
 
+export function withRemote(dir: string, name: string): string {
+  const bare = join(scratchDir(), `${name}.git`);
+  execFileSync("git", ["init", "-q", "--bare", "-b", "main", bare]);
+  git(dir, ["remote", "add", name, bare]);
+  git(dir, ["push", "-q", name, "main"]);
+  return bare;
+}
+
 export function projectAt(dir: string): Project {
   return { primary: dir, commonDir: join(dir, ".git") };
 }

@@ -152,6 +152,15 @@ export function repo(w: World, at = join(w.root, "clones", "repo")): string {
   return at;
 }
 
+export function bareRemote(w: World, dir: string): string {
+  const bare = join(w.root, "remotes", "origin.git");
+  mkdirSync(dirname(bare), { recursive: true });
+  git(w, w.root, ["init", "-q", "--bare", "-b", "main", bare]);
+  git(w, dir, ["remote", "add", "origin", bare]);
+  git(w, dir, ["push", "-q", "origin", "main"]);
+  return bare;
+}
+
 export type ScriptName = "worktree-setup.sh" | "worktree-teardown.sh";
 
 export function script(w: World, checkout: string, name: ScriptName, body: string): void {
