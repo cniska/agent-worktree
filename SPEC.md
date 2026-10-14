@@ -63,13 +63,13 @@ Two agents in one checkout overwrite each other's files, so parallel work needs 
 
 ### 2.7 ls
 
-- **FR-30** — `ls` prints one line per registered worktree and per unregistered entry where the project's worktrees live: its name, its state, its branch and its path, sorted by name.
+- **FR-30** — `ls` prints one line per registered worktree and per unregistered entry where the project's worktrees live: its name, its state, its branch, its port block (FR-57) and its path, sorted by name.
 - **FR-31** — `ls` with nothing to list prints nothing on stdout and notes `no task worktrees` on stderr.
 
 ### 2.8 Project scripts
 
 - **FR-32** — A project needs no script. `scripts/worktree-setup.sh` runs in the checkout being set up, as that checkout has it; `scripts/worktree-teardown.sh` runs in the primary checkout, since the worktree may already be gone.
-- **FR-33** — Both scripts get `WORKTREE_PRIMARY`, `WORKTREE_PATH` and, for a task worktree, `WORKTREE_NAME`. `WORKTREE_PATH` is where the worktree actually is, or where git last listed it when the command started; for a worktree git no longer lists, such as one dropped with `git worktree remove`, it is unset. For the primary, `WORKTREE_NAME` is unset. A variable left unset stays unset even when the caller's environment set it. Beyond these variables, a script gets the caller's environment, with nothing of agent-worktree's own added, such as the Bun it runs on.
+- **FR-33** — Both scripts get `WORKTREE_PRIMARY`, `WORKTREE_PATH`, for a task worktree `WORKTREE_NAME`, and for a worktree holding a port block `WORKTREE_PORT` (FR-56). `WORKTREE_PATH` is where the worktree actually is, or where git last listed it when the command started; for a worktree git no longer lists, such as one dropped with `git worktree remove`, it is unset. For the primary, `WORKTREE_NAME` and `WORKTREE_PORT` are unset. A variable left unset stays unset even when the caller's environment set it. Beyond these variables, a script gets the caller's environment, with nothing of agent-worktree's own added, such as the Bun it runs on.
 - **FR-34** — A script that exists but is not executable is refused as `script_not_executable`, and one that cannot start as `script_unrunnable`; neither is skipped.
 - **FR-35** — A script's output goes to stderr and is never read; its exit status alone decides success.
 
@@ -97,12 +97,24 @@ Two agents in one checkout overwrite each other's files, so parallel work needs 
 - **FR-49** — `agent-worktree` with no command, or with `--help`, lists every command with its usage and summary; `<command> --help` prints that command's.
 - **FR-50** — Every error is a refusal, with a code, a message naming what was refused and why, and the act that resolves it, or a fault, whose act is to hand it to the owner.
 
+### 2.12 Port blocks
+
+- **FR-51** — Setting up a task worktree gives it the lowest free block of 10 consecutive ports from 24000 to 24999, each block starting at a multiple of 10, and records the block in the ledger; a block is never derived from a hash of the worktree's name or path. The primary checkout gets no block, so it keeps the project's default ports.
+- **FR-52** — A block is free when no registered worktree of any project on the machine holds it and none of its ports is bound on `127.0.0.1`, `0.0.0.0`, `::1` or `::`; a port another program binds skips its whole block.
+- **FR-53** — Two commands claiming at once never get the same block.
+- **FR-54** — With no free block, `create` and `init` are refused as `no_free_ports`, naming `remove` and `prune`; the worktree stays registered with setup pending and no block, and once a block is freed the next `create` or `init` claims one and resumes setup.
+- **FR-55** — `init` in a registered task worktree with no block, such as one an earlier release registered, claims one before setup runs.
+- **FR-56** — `WORKTREE_PORT` is the first port of the worktree's block, which runs to `WORKTREE_PORT` + 9.
+- **FR-57** — `ls` shows a worktree's block as `<first>-<last>`, or `-` when it holds none.
+- **FR-58** — `remove` frees the block when it unregisters the worktree; a worktree left registered after a failed teardown keeps its block, and its teardown during `prune` gets it.
+- **FR-59** — `prune` frees every block whose worktree's ledger entry is gone, in any project on the machine, such as one whose clone was deleted.
+
 ## 3. Non-functional requirements
 
 - **NF-1** — Every command reads the ledger, the filesystem and git afresh; nothing is remembered between commands.
 - **NF-2** — Doing the act a refusal names, then running the command again, does not meet the same refusal.
 - **NF-3** — The tests never read or write the real home: `HOME` and the XDG directories point at scratch directories.
-- **NF-4** — agent-worktree needs no network.
+- **NF-4** — agent-worktree needs no network; it only listens on a local port for a moment to see whether it is free (FR-52).
 
 ## 4. Out of scope
 
@@ -144,6 +156,14 @@ Two agents in one checkout overwrite each other's files, so parallel work needs 
 - **AC-27** — The test environment's `HOME` and XDG directories are scratch directories, not the account's. (NF-3)
 - **AC-28** — The whole suite passes with the network unavailable. (NF-4)
 - **AC-29** — `create` through `bin/agent-worktree` with a setup script that records its environment: the caller's environment and the FR-33 variables, nothing else. (FR-33)
+- **AC-30** — `create task-a` and `task-b`: setup gets the first two free blocks as `WORKTREE_PORT`, and `ls` shows each as `<first>-<last>`; `init` in the primary with `WORKTREE_PORT` inherited: setup gets it unset. (FR-33, FR-51, FR-56, FR-57)
+- **AC-31** — `remove task-a`: its teardown gets its block, and the next `create` gets that block again. (FR-51, FR-58)
+- **AC-32** — Hold one port of the lowest free block in another program, then `create`: the worktree gets the next block. (FR-52)
+- **AC-33** — A second clone creates a worktree in the same data directory: it gets the next block; delete the first clone and `prune` in the second: the next `create` there gets the first clone's block. (FR-52, FR-59)
+- **AC-34** — Several `create`s started at once: each worktree gets a different block. (FR-53)
+- **AC-35** — Hold a port in every free block, then `create`: `no_free_ports` with the worktree `setup pending` and no block; free them and rerun: setup gets the lowest block and it reads `ready`. (FR-54, NF-2)
+- **AC-36** — A registration with no block, written by hand: `ls` shows `-`; `init` in it: setup gets a block and `ls` shows it. (FR-55, FR-57)
+- **AC-37** — `remove --force` past a failed teardown: `ls` still shows the block; fix teardown and `prune`: the teardown gets the block, and the next `create` gets it. (FR-58)
 
 ## 6. Deliverables
 
@@ -164,11 +184,14 @@ Two agents in one checkout overwrite each other's files, so parallel work needs 
 - The hash and its length in the key, provided FR-4 and FR-5 hold.
 - The ledger's format, provided FR-7 holds.
 - The wording of each state in `ls`.
+- Where the ledger keeps a block, provided FR-51 to FR-53 and FR-59 hold.
 
 ### Policies chosen (not open)
 
 - A worktree in the earlier location is refused, not handled where it is; agent-worktree never moves one itself (FR-42).
 - The `WorktreeRemove` hook removes with force, since Claude Code removes a worktree only when its session is done with it (FR-37).
+- Port blocks start at 24000, below the ephemeral ranges of Linux (from 32768) and macOS (from 49152) and Kubernetes' node ports (30000 to 32767), and apart from ranges a project keeps for itself, such as Hoodly's from 47000 (FR-51).
+- Blocks are allocated across every project on the machine, not per clone, since ports are the machine's: two clones allocating apart would both take 24000 (FR-52).
 
 ## 9. Open questions and known gaps
 
@@ -183,4 +206,5 @@ Not proven by a criterion:
 Open questions:
 
 - **A moved primary.** FR-4 keys by path, so after the primary moves, its worktrees read as gone and `prune` would tear them down. Should agent-worktree refuse instead, naming `git worktree repair`?
+- **A stale block left after a crash.** A block whose worktree's ledger entry is gone stays claimed until a `prune` in any project frees it (FR-59), since `create` never takes one over. Should `create` free stale blocks itself, at the cost of racing a concurrent claim?
 - **When FR-41 to FR-45 go.** They serve only worktrees made before the move to FR-1; they can be deleted once the owner's machines hold none.

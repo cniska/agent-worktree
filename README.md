@@ -32,7 +32,7 @@ Claude Code makes worktrees of its own, for EnterWorktree and for subagents with
 
 ## Where worktrees live
 
-A task worktree lives at `${XDG_DATA_HOME:-~/.local/share}/agent-worktree/<project>-<hash>/<name>`, outside the primary checkout, so it does not pick up the primary's own config, such as its `mise.toml`. `<project>` is the primary checkout's directory name and `<hash>` is taken from its absolute path, so two clones with one name get their own directories. Run `agent-worktree path <name>` to find one. The record of which worktrees agent-worktree registered, and whether their setup finished, stays with the clone in `.git/agent-worktrees`.
+A task worktree lives at `${XDG_DATA_HOME:-~/.local/share}/agent-worktree/<project>-<hash>/<name>`, outside the primary checkout, so it does not pick up the primary's own config, such as its `mise.toml`. `<project>` is the primary checkout's directory name and `<hash>` is taken from its absolute path, so two clones with one name get their own directories. Run `agent-worktree path <name>` to find one. The record of which worktrees agent-worktree registered, and whether their setup finished, stays with the clone in `.git/agent-worktrees`; which worktree holds which port block is kept for the whole machine in `${XDG_DATA_HOME:-~/.local/share}/agent-worktree/ports`.
 
 Releases before this one made worktrees at `<primary>/.claude/worktrees/<name>`. `ls` lists such a worktree as `legacy`, and every other command refuses it, naming the two ways out: move it to its new path with `git worktree move` and run `agent-worktree init` in it, or remove it with `git worktree remove` and run `agent-worktree prune`, which runs its teardown.
 
@@ -40,7 +40,36 @@ Releases before this one made worktrees at `<primary>/.claude/worktrees/<name>`.
 
 Any git repository works as it is. A project whose worktrees need more than a checkout adds `scripts/worktree-setup.sh`, `scripts/worktree-teardown.sh`, or both. [`SPEC.md`](SPEC.md) states what each gets and when it runs (§2.8), and everything else that must hold.
 
-Without the CLI, run the same scripts by hand from the primary checkout, setting any `WORKTREE_*` variable a script reads (§2.8) and skipping one the project lacks:
+### Ports
+
+Each task worktree gets its own block of 10 ports, the lowest free one from 24000 to 24999, and its scripts get the first as `WORKTREE_PORT`; the block runs to `WORKTREE_PORT` + 9. A block is never worked out from the name, so two worktrees never share one, and a block where another program already listens is skipped. Blocks are shared across every clone on the machine; `ls` shows each worktree's, `remove` frees it, and `prune` frees those of worktrees removed some other way, even in a clone since deleted. The primary checkout gets no block and keeps the project's default ports, so a plain clone, such as CI's, does too. `init` gives a block to a worktree an earlier release made.
+
+A project that runs its services with Docker Compose gives each worktree its own stack. The compose file keeps the defaults for the primary, as in `"${WEB_PORT:-3000}:3000"`. `scripts/worktree-setup.sh` writes the worktree's `.env`, which Compose reads:
+
+```sh
+#!/bin/sh
+set -eu
+[ -n "${WORKTREE_NAME:-}" ] || exit 0
+cat > .env <<EOF
+COMPOSE_PROJECT_NAME=$(printf 'myapp-%s' "$WORKTREE_NAME" | tr 'A-Z.' 'a-z_')
+WEB_PORT=$WORKTREE_PORT
+DB_PORT=$((WORKTREE_PORT + 1))
+EOF
+```
+
+`scripts/worktree-teardown.sh` removes the stack and its volumes. It runs in the primary checkout, where the worktree's `.env` may already be gone, so it names the stack itself:
+
+```sh
+#!/bin/sh
+set -eu
+docker compose --project-name "$(printf 'myapp-%s' "$WORKTREE_NAME" | tr 'A-Z.' 'a-z_')" down -v
+```
+
+Keep `.env` out of git.
+
+### Without the CLI
+
+Run the same scripts by hand from the primary checkout, setting any `WORKTREE_*` variable a script reads (§2.8), with a free port for `WORKTREE_PORT`, and skipping one the project lacks:
 
 ```bash
 git worktree add ../<name>
@@ -57,7 +86,7 @@ git worktree remove ../<name>
 | `agent-worktree init` | Run setup in the current checkout, primary or task worktree. |
 | `agent-worktree remove [--force] <name>` | Run teardown, remove the worktree, keep the branch. Without `--force` a dirty worktree, one with submodules or a failed teardown refuses; a locked worktree always does. |
 | `agent-worktree prune` | Prune git's stale worktree entries and tear down every worktree that is gone but still registered; refuses with the names whose teardown failed. |
-| `agent-worktree ls` | One line per worktree: name, state, branch, path. |
+| `agent-worktree ls` | One line per worktree: name, state, branch, port block, path. |
 | `agent-worktree path <name>` | Print the worktree's path. |
 | `agent-worktree hook` | The plugin's `WorktreeCreate` and `WorktreeRemove` entry: reads the event from stdin. |
 

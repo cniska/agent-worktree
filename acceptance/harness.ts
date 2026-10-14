@@ -59,20 +59,50 @@ export function world(): World {
   };
 }
 
-const OFFLINE = ["/usr/bin/sandbox-exec", "-p", "(version 1)(allow default)(deny network*)"];
+const OFFLINE = [
+  "/usr/bin/sandbox-exec",
+  "-p",
+  '(version 1)(allow default)(deny network*)(allow network-bind network-inbound (local ip "*:*"))',
+];
 
 type RunOptions = { readonly stdin?: string; readonly env?: Env; readonly unset?: readonly string[] };
 
-function spawn(w: World, cwd: string, argv: readonly string[], { stdin, env, unset }: RunOptions): Ran {
+function environment(w: World, { env, unset }: RunOptions): Env {
+  return Object.fromEntries(Object.entries({ ...w.env, ...env }).filter(([name]) => !unset?.includes(name)));
+}
+
+function spawn(w: World, cwd: string, argv: readonly string[], options: RunOptions): Ran {
   const [program = "", ...args] = [...OFFLINE, ...argv];
-  const merged = Object.entries({ ...w.env, ...env }).filter(([name]) => !unset?.includes(name));
   const ran = spawnSync(program, args, {
     cwd,
-    input: stdin ?? "",
+    input: options.stdin ?? "",
     encoding: "utf8",
-    env: Object.fromEntries(merged),
+    env: environment(w, options),
   });
   return { exitCode: ran.status ?? -1, stdout: ran.stdout, stderr: ran.stderr };
+}
+
+export async function runAtOnce(
+  w: World,
+  cwd: string,
+  runs: readonly (readonly string[])[],
+): Promise<readonly Ran[]> {
+  return Promise.all(
+    runs.map(async (args) => {
+      const child = Bun.spawn([...OFFLINE, process.execPath, ENTRY, ...args], {
+        cwd,
+        env: environment(w, {}),
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const [stdout, stderr, exitCode] = await Promise.all([
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+        child.exited,
+      ]);
+      return { exitCode, stdout, stderr };
+    }),
+  );
 }
 
 export function run(w: World, cwd: string, args: readonly string[], options: RunOptions = {}): Ran {
@@ -135,6 +165,14 @@ export function script(w: World, checkout: string, name: ScriptName, body: strin
 
 export function recording(record: string): string {
   return `printf '%s\\t%s\\t%s\\t%s\\n' "\${WORKTREE_NAME-unset}" "\${WORKTREE_PATH-unset}" "$WORKTREE_PRIMARY" "$(pwd -P)" >> "${record}"`;
+}
+
+export function portRecording(record: string): string {
+  return `printf '%s\\n' "\${WORKTREE_PORT-unset}" >> "${record}"`;
+}
+
+export function portsRecorded(record: string): readonly string[] {
+  return existsSync(record) ? readFileSync(record, "utf8").split("\n").slice(0, -1) : [];
 }
 
 export type Recorded = {
@@ -220,14 +258,72 @@ function isState(text: string): text is Listed["state"] {
   return STATES.some((state) => state === text);
 }
 
-export function ls(w: World, dir: string): readonly Listed[] {
+type ListedLine = Listed & { readonly ports: string };
+
+function listed(w: World, dir: string): readonly ListedLine[] {
   return succeeded(run(w, dir, ["ls"])).map((line) => {
     const fields = line.split("\t");
-    expect(fields).toHaveLength(4);
-    const [name = "", state = "", branch = "", path = ""] = fields;
+    expect(fields).toHaveLength(5);
+    const [name = "", state = "", branch = "", ports = "", path = ""] = fields;
     if (!isState(state)) throw new Error(`${state} is not a state ls prints`);
-    return { name, state, branch, path };
+    return { name, state, branch, ports, path };
   });
+}
+
+export function ls(w: World, dir: string): readonly Listed[] {
+  return listed(w, dir).map(({ name, state, branch, path }) => ({ name, state, branch, path }));
+}
+
+export function lsPorts(w: World, dir: string): Readonly<Record<string, string>> {
+  return Object.fromEntries(listed(w, dir).map(({ name, ports }) => [name, ports]));
+}
+
+const FIRST_BLOCK = 24000;
+
+const BLOCK_WIDTH = 10;
+
+const BLOCK_COUNT = 100;
+
+function boundOn(hostname: string, port: number): boolean {
+  try {
+    Bun.listen({ hostname, port, socket: { data() {} } }).stop(true);
+    return false;
+  } catch {
+    return true;
+  }
+}
+
+function blockBound(block: number): boolean {
+  return Array.from({ length: BLOCK_WIDTH }, (_, offset) => block + offset).some((port) =>
+    ["127.0.0.1", "0.0.0.0", "::1", "::"].some((host) => boundOn(host, port)),
+  );
+}
+
+type FreeBlocks = readonly [number, number, ...number[]];
+
+function atLeastTwo(blocks: readonly number[]): blocks is FreeBlocks {
+  return blocks.length >= 2;
+}
+
+export function freeBlocks(): FreeBlocks {
+  const free = Array.from({ length: BLOCK_COUNT }, (_, index) => FIRST_BLOCK + index * BLOCK_WIDTH).filter(
+    (block) => !blockBound(block),
+  );
+  if (!atLeastTwo(free)) throw new Error("fewer than two port blocks are free on this machine");
+  return free;
+}
+
+export function blockText(block: number): string {
+  return `${block}-${block + BLOCK_WIDTH - 1}`;
+}
+
+export function holding<T>(ports: readonly number[], body: () => T): T {
+  const held = ports.map((port) => Bun.listen({ hostname: "127.0.0.1", port, socket: { data() {} } }));
+  try {
+    return body();
+  } finally {
+    for (const listener of held) listener.stop(true);
+  }
 }
 
 export function hookEvent(fields: Readonly<Record<string, string>>): string {

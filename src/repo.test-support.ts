@@ -13,6 +13,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { CodedError } from "./coded-error";
+import { type Block, blocks, isBound } from "./ports";
 import { type Project, parseName, type WorktreeName, worktreePath } from "./project";
 
 const scratchDirs: string[] = [];
@@ -98,12 +99,20 @@ export type Fixture = {
   readonly project: Project;
   readonly setupRecord: string;
   readonly teardownRecord: string;
+  readonly firstFreeBlock: Block;
   name(raw: string): WorktreeName;
   path(raw: string): string;
 };
 
+function firstFreeBlock(): Block {
+  const free = blocks().find((block) => !isBound(block));
+  if (free === undefined) throw new Error("every port block is bound on this machine");
+  return free;
+}
+
 export function fixture({ setup, teardown }: { setup?: string; teardown?: string } = {}): Fixture {
   const dir = repo();
+  process.env.XDG_DATA_HOME = join(dirname(dir), "data");
   linkScript(dir, "worktree-setup.sh", setup ?? recording(SETUP_RECORD));
   if (teardown !== undefined) linkScript(dir, "worktree-teardown.sh", teardown);
   git(dir, ["add", "scripts"]);
@@ -122,6 +131,7 @@ export function fixture({ setup, teardown }: { setup?: string; teardown?: string
     project: current,
     setupRecord: join(dirname(dir), RECORD.setup),
     teardownRecord: join(dirname(dir), RECORD.teardown),
+    firstFreeBlock: firstFreeBlock(),
     name,
     path: (raw) => worktreePath(current, name(raw)),
   };

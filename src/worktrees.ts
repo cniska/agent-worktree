@@ -13,7 +13,17 @@ import {
   type Worktree,
   worktrees,
 } from "./git";
-import { type Entry, entries, markReady, register, unregister } from "./ledger";
+import {
+  blockOf,
+  claimBlock,
+  type Entry,
+  entries,
+  freeStaleBlocks,
+  markReady,
+  register,
+  unregister,
+} from "./ledger";
+import type { Block } from "./ports";
 import {
   isWorktreeName,
   legacyPath,
@@ -36,7 +46,11 @@ type Unmanaged = { readonly kind: "unmanaged"; readonly name: string; readonly w
 
 type State = { readonly kind: "absent" } | Unmanaged | Registered;
 
-export type Listed = { readonly path: string; readonly state: Unmanaged | Registered };
+export type Listed = {
+  readonly path: string;
+  readonly state: Unmanaged | Registered;
+  readonly block: Block | null;
+};
 
 const refuse = refuser<{
   readonly case_collision: { readonly name: string; readonly existing: string };
@@ -185,9 +199,10 @@ function legacyRefusal(project: Project, name: WorktreeName, worktree: Worktree)
 }
 
 function setUp(project: Project, name: WorktreeName | null, checkout: string): void {
+  const block = name === null ? null : claimBlock(project, name);
   const script = scriptIn(checkout, SETUP);
   if (script !== null) {
-    const exit = runScript(script, checkout, { name, path: checkout, primary: project.primary });
+    const exit = runScript(script, checkout, { name, path: checkout, primary: project.primary, block });
     if (!succeeded(exit)) throw refuse("setup_failed", { checkout, exit });
   }
   if (name !== null) markReady(project, name);
@@ -196,7 +211,8 @@ function setUp(project: Project, name: WorktreeName | null, checkout: string): v
 function tearDown(project: Project, name: WorktreeName, path: string | null): Exit | null {
   const script = scriptIn(project.primary, TEARDOWN);
   if (script === null) return null;
-  const exit = runScript(script, project.primary, { name, path, primary: project.primary });
+  const block = blockOf(project, name);
+  const exit = runScript(script, project.primary, { name, path, primary: project.primary, block });
   return succeeded(exit) ? null : exit;
 }
 
@@ -278,6 +294,7 @@ export function prune(project: Project): void {
     if (tearDown(project, state.name, path) === null) unregister(project, state.name);
     else failed.push(state.name);
   }
+  freeStaleBlocks();
   if (failed.length > 0) throw refuse("teardowns_failed", { names: failed });
 }
 
@@ -294,7 +311,8 @@ export function list(project: Project): readonly Listed[] {
     .map((name) => {
       const state = stateIn(snap, project, name);
       invariant(state.kind !== "absent", `${name} is in the snapshot`);
-      return { path: pathOf(project, state), state };
+      const block = snap.entries.find((item) => item.name === name)?.block ?? null;
+      return { path: pathOf(project, state), state, block };
     })
     .sort(byName);
 }

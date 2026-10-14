@@ -1,15 +1,18 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { chmodSync, existsSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { type Block, blocks, isBound } from "./ports";
 import {
   caseSensitiveFilesystem,
   type Fixture,
   fixture,
   git,
+  projectAt,
   recorded,
   recording,
   refusal,
   removeScratchDirs,
+  repo,
   SETUP_RECORD,
   script,
   TEARDOWN_RECORD,
@@ -36,6 +39,7 @@ describe("create", () => {
       {
         path,
         state: { kind: "ready", name: f.name("task-a"), worktree: { path, branch: "task-a", locked: false } },
+        block: f.firstFreeBlock,
       },
     ]);
   });
@@ -125,7 +129,9 @@ describe("create", () => {
     writeFileSync(path, "not a dir");
     writeFileSync(join(dirname(path), ".DS_Store"), "");
     expect(refusal(() => create(f.project, f.name("task-e"))).code).toBe("unmanaged");
-    expect(list(f.project)).toEqual([{ path, state: { kind: "unmanaged", name: "task-e", worktree: null } }]);
+    expect(list(f.project)).toEqual([
+      { path, state: { kind: "unmanaged", name: "task-e", worktree: null }, block: null },
+    ]);
   });
 
   test("a registered name whose path is a file reads as unlisted everywhere", () => {
@@ -134,7 +140,7 @@ describe("create", () => {
     const path = create(f.project, name);
     git(f.dir, ["worktree", "remove", "--force", path]);
     writeFileSync(path, "not a dir");
-    expect(list(f.project)).toEqual([{ path, state: { kind: "unlisted", name } }]);
+    expect(list(f.project)).toEqual([{ path, state: { kind: "unlisted", name }, block: f.firstFreeBlock }]);
     expect(refusal(() => create(f.project, name)).code).toBe("not_a_worktree");
   });
 
@@ -162,7 +168,11 @@ describe("create", () => {
     const path = create(f.project, name);
     rmSync(path, { recursive: true });
     expect(list(f.project)).toEqual([
-      { path, state: { kind: "orphaned", name, worktree: { path, branch: "task-a", locked: false } } },
+      {
+        path,
+        state: { kind: "orphaned", name, worktree: { path, branch: "task-a", locked: false } },
+        block: f.firstFreeBlock,
+      },
     ]);
     expect(refusal(() => create(f.project, name)).code).toBe("orphaned");
     expect(refusal(() => remove(f.project, name, true)).code).toBe("orphaned");
@@ -180,7 +190,7 @@ describe("create", () => {
     expect(refused.resolve).toBe("remove the directory, then agent-worktree prune");
     expect(existsSync(f.setupRecord)).toBe(false);
     expect(refusal(() => remove(f.project, name, true)).code).toBe("not_a_worktree");
-    expect(list(f.project)).toEqual([{ path, state: { kind: "unlisted", name } }]);
+    expect(list(f.project)).toEqual([{ path, state: { kind: "unlisted", name }, block: f.firstFreeBlock }]);
   });
 
   test("a name differing only in case from an existing one is refused before anything is written", () => {
@@ -196,6 +206,7 @@ describe("create", () => {
       {
         path,
         state: { kind: "ready", name: f.name("task-a"), worktree: { path, branch: "task-a", locked: false } },
+        block: f.firstFreeBlock,
       },
     ]);
   });
@@ -213,7 +224,7 @@ describe("remove", () => {
       expect(remove(f.project, f.name("task-a"), false).path).toBe(path);
       expect(existsSync(path)).toBe(false);
       expect(list(f.project)).toEqual([
-        { path: stray, state: { kind: "unmanaged", name: "Task-A", worktree: null } },
+        { path: stray, state: { kind: "unmanaged", name: "Task-A", worktree: null }, block: null },
       ]);
     },
   );
@@ -333,7 +344,9 @@ describe("remove", () => {
     expect(existsSync(path)).toBe(true);
     remove(f.project, name, true);
     expect(existsSync(path)).toBe(false);
-    expect(list(f.project)).toEqual([{ path, state: { kind: "orphaned", name, worktree: null } }]);
+    expect(list(f.project)).toEqual([
+      { path, state: { kind: "orphaned", name, worktree: null }, block: f.firstFreeBlock },
+    ]);
   });
 
   test("a signal-killed teardown keeps the worktree", () => {
@@ -519,6 +532,7 @@ describe("a worktree in the earlier location", () => {
           name: f.name("task-a"),
           worktree: { path: old, branch: "task-a", locked: false },
         },
+        block: null,
       },
     ]);
   });
@@ -591,5 +605,127 @@ describe("a worktree in the earlier location", () => {
     expect(list(f.project)).toEqual([]);
     expect(existsSync(stray)).toBe(true);
     expect(existsSync(f.teardownRecord)).toBe(false);
+  });
+});
+
+const PORT_RECORD = `printf '%s\\n' "\${WORKTREE_PORT-unset}" >> "$WORKTREE_PRIMARY/../port-record"`;
+
+function portRecord(f: Fixture): readonly string[] {
+  const path = join(dirname(f.dir), "port-record");
+  return existsSync(path) ? recorded(path) : [];
+}
+
+function blockOf(f: Fixture, name: string): Block | null | undefined {
+  return list(f.project).find((item) => item.state.name === name)?.block;
+}
+
+function freeBlocks(): readonly Block[] {
+  return blocks().filter((block) => !isBound(block));
+}
+
+function holding<T>(ports: readonly number[], run: () => T): T {
+  const held = ports.flatMap((port) => {
+    try {
+      return [Bun.listen({ hostname: "127.0.0.1", port, socket: { data() {} } })];
+    } catch {
+      return [];
+    }
+  });
+  try {
+    return run();
+  } finally {
+    for (const listener of held) listener.stop(true);
+  }
+}
+
+describe("port blocks", () => {
+  test("each worktree gets the lowest free block, and its scripts get its first port", () => {
+    const f = fixture({ setup: PORT_RECORD, teardown: PORT_RECORD });
+    const [first, second] = freeBlocks();
+    create(f.project, f.name("task-a"));
+    create(f.project, f.name("task-b"));
+    expect(blockOf(f, "task-a")).toBe(first);
+    expect(blockOf(f, "task-b")).toBe(second);
+    expect(portRecord(f)).toEqual([String(first), String(second)]);
+    remove(f.project, f.name("task-a"), false);
+    expect(portRecord(f)).toEqual([String(first), String(second), String(first)]);
+    create(f.project, f.name("task-c"));
+    expect(blockOf(f, "task-c")).toBe(first);
+  });
+
+  test("the primary gets no block and no inherited port", () => {
+    const f = fixture({ setup: PORT_RECORD });
+    process.env.WORKTREE_PORT = "1";
+    try {
+      init(f.project, f.dir);
+    } finally {
+      delete process.env.WORKTREE_PORT;
+    }
+    expect(portRecord(f)).toEqual(["unset"]);
+  });
+
+  test("a block with a port bound by another program is skipped", () => {
+    const f = fixture();
+    const [first, second] = freeBlocks();
+    if (first === undefined) throw new Error("no free block");
+    holding([first + 9], () => create(f.project, f.name("task-a")));
+    expect(blockOf(f, "task-a")).toBe(second);
+  });
+
+  test("a block another project holds is skipped, and prune frees it once that project is gone", () => {
+    const f = fixture();
+    const [first, second] = freeBlocks();
+    const other = projectAt(repo());
+    create(other, f.name("task-a"));
+    create(f.project, f.name("task-a"));
+    expect(blockOf(f, "task-a")).toBe(second);
+    rmSync(dirname(other.primary), { recursive: true, force: true });
+    prune(f.project);
+    create(f.project, f.name("task-b"));
+    expect(blockOf(f, "task-b")).toBe(first);
+  });
+
+  test("with no free block create refuses, keeps setup pending, and resumes once one is freed", () => {
+    const f = fixture({ setup: PORT_RECORD });
+    const free = freeBlocks();
+    const refused = holding(free, () => refusal(() => create(f.project, f.name("task-a"))));
+    expect(refused.code).toBe("no_free_ports");
+    expect(refused.message).toBe(
+      "no port block from 24000 to 24999 is free for task-a: worktrees hold some and other programs bind the rest; setup is pending",
+    );
+    expect(refused.resolve).toBe(
+      "remove a worktree you are done with, or run agent-worktree prune to free the blocks of worktrees that are gone, then run the command again",
+    );
+    expect(stateKind(f, "task-a")).toBe("pending");
+    expect(portRecord(f)).toEqual([]);
+    create(f.project, f.name("task-a"));
+    expect(stateKind(f, "task-a")).toBe("ready");
+    expect(portRecord(f)).toEqual([String(free[0])]);
+  });
+
+  test("init gives a registered worktree with no block one", () => {
+    const f = fixture({ setup: PORT_RECORD });
+    const path = f.path("task-a");
+    git(f.dir, ["worktree", "add", "-q", path, "-b", "task-a"]);
+    mkdirSync(join(f.dir, ".git", "agent-worktrees", "task-a"), { recursive: true });
+    writeFileSync(join(f.dir, ".git", "agent-worktrees", "task-a", "ready"), "");
+    expect(blockOf(f, "task-a")).toBeNull();
+    init(f.project, path);
+    expect(blockOf(f, "task-a")).toBe(f.firstFreeBlock);
+    expect(portRecord(f)).toEqual([String(f.firstFreeBlock)]);
+  });
+
+  test("a worktree forced out past a failed teardown keeps its block until prune tears it down", () => {
+    const f = fixture({ teardown: "exit 3" });
+    const name = f.name("task-a");
+    const path = create(f.project, name);
+    remove(f.project, name, true);
+    expect(blockOf(f, "task-a")).toBe(f.firstFreeBlock);
+    script(f.dir, "worktree-teardown.sh", PORT_RECORD);
+    prune(f.project);
+    expect(portRecord(f)).toEqual([String(f.firstFreeBlock)]);
+    expect(existsSync(path)).toBe(false);
+    create(f.project, f.name("task-b"));
+    expect(blockOf(f, "task-b")).toBe(f.firstFreeBlock);
   });
 });

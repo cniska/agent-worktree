@@ -90,6 +90,7 @@ const MODULES = [
   "log",
   "assert",
   "coded-error",
+  "ports",
 ];
 
 const ENTRY = "cli";

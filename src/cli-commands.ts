@@ -4,6 +4,7 @@ import { type Command, usageRefusal } from "./cli-contract";
 import type { Worktree } from "./git";
 import { parseHookEvent } from "./hook";
 import { note } from "./log";
+import { blockText } from "./ports";
 import { checkout, type Project, parseName, project, type WorktreeName, worktreePath } from "./project";
 import { create, init, type Listed, list, prune, remove } from "./worktrees";
 
@@ -59,8 +60,14 @@ function branchText(state: Listed["state"]): string {
 
 const NOTHING_LISTED = "no task worktrees";
 
-function listedLine({ path, state }: Listed): string {
-  return [state.name, stateText(state), branchText(state), path].join("\t");
+const NO_BLOCK = "-";
+
+function portsText(block: Listed["block"]): string {
+  return block === null ? NO_BLOCK : blockText(block);
+}
+
+function listedLine({ path, state, block }: Listed): string {
+  return [state.name, stateText(state), branchText(state), portsText(block), path].join("\t");
 }
 
 const createCommand: Command = {
@@ -113,7 +120,7 @@ const pruneCommand: Command = {
 const lsCommand: Command = {
   name: "ls",
   usage: "agent-worktree ls",
-  summary: "list the worktrees: name, state, branch, path",
+  summary: "list the worktrees: name, state, branch, port block, path",
   options: {},
   run(positionals) {
     noPositionals(positionals, this);

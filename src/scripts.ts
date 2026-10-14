@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { refuser } from "./coded-error";
 import { type Exit, exitOf } from "./exit";
 import { note } from "./log";
+import type { Block } from "./ports";
 import type { WorktreeName } from "./project";
 
 export const SETUP = "scripts/worktree-setup.sh";
@@ -13,6 +14,7 @@ type ScriptEnv = {
   readonly name: WorktreeName | null;
   readonly path: string | null;
   readonly primary: string;
+  readonly block: Block | null;
 };
 
 const refuse = refuser<{
@@ -62,14 +64,15 @@ export function scriptIn(checkout: string, relative: typeof SETUP | typeof TEARD
   return script;
 }
 
-export function runScript(script: string, cwd: string, { name, path, primary }: ScriptEnv): Exit {
+export function runScript(script: string, cwd: string, { name, path, primary, block }: ScriptEnv): Exit {
   note(`running ${script} in ${cwd}`);
-  const { WORKTREE_NAME: _name, WORKTREE_PATH: _path, ...env } = process.env;
+  const { WORKTREE_NAME: _name, WORKTREE_PATH: _path, WORKTREE_PORT: _port, ...env } = process.env;
   const named = name === null ? {} : { WORKTREE_NAME: name };
   const located = path === null ? {} : { WORKTREE_PATH: path };
+  const ported = block === null ? {} : { WORKTREE_PORT: String(block) };
   const run = spawnSync(script, [], {
     cwd,
-    env: { ...env, ...named, ...located, WORKTREE_PRIMARY: primary },
+    env: { ...env, ...named, ...located, ...ported, WORKTREE_PRIMARY: primary },
     stdio: ["ignore", 2, 2],
   });
   if (run.error) throw refuse("script_unrunnable", { script, detail: run.error.message });

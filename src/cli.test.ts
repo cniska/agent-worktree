@@ -89,11 +89,12 @@ describe("the cli", () => {
   });
 
   test("hook reads a WorktreeCreate event from stdin and prints only the path", () => {
-    const { dir, path } = fixture();
+    const { dir, path, firstFreeBlock } = fixture();
     const run = cli(dir, ["hook"], hookEvent({ hook_event_name: "WorktreeCreate", name: "task-a" }));
     expect(run.status).toBe(0);
     expect(run.stdout).toBe(`${path("task-a")}\n`);
-    expect(cli(dir, ["ls"]).stdout).toBe(`task-a\tready\ttask-a\t${path("task-a")}\n`);
+    const ports = `${firstFreeBlock}-${firstFreeBlock + 9}`;
+    expect(cli(dir, ["ls"]).stdout).toBe(`task-a\tready\ttask-a\t${ports}\t${path("task-a")}\n`);
   });
 
   test("hook reads a WorktreeRemove event from stdin and removes by force, run from inside the worktree", () => {
