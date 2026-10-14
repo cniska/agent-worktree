@@ -1,6 +1,6 @@
 # agent-worktree Specification
 
-> Task worktrees for coding agents: one task, one checkout, set up and torn down by the project's own scripts.
+> Task worktrees for coding agents, so agents working in parallel never share a checkout: one task, one checkout, set up and torn down by the project's own scripts.
 
 This document states what must hold, not how. [`README.md`](README.md) has the install and the commands, and [`src/README.md`](src/README.md) maps the modules that meet these requirements.
 
@@ -108,7 +108,8 @@ Two agents in one checkout overwrite each other's files, so parallel work needs 
 
 - Moving a worktree between locations; the owner moves one from the earlier location with git (FR-42).
 - Following a primary checkout that moved (FR-4 keys by path; see §9).
-- Worktrees agent-worktree did not create, including Claude Code's own when the plugin is not installed.
+- Working out or writing a project's setup or teardown, and installing anything for the project; the project's `scripts/worktree-setup.sh` and `scripts/worktree-teardown.sh` own that (FR-32).
+- Worktrees agent-worktree did not create, including Claude Code's own when the plugin is not installed; git, or Claude Code for its own, manages those.
 - Bare repositories, submodules and separate git dirs (FR-11).
 - Reading a script's output (FR-35).
 
