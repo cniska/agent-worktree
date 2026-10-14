@@ -1,4 +1,4 @@
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import {
   chmodSync,
   existsSync,
@@ -11,11 +11,9 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join } from "node:path";
 import { CodedError } from "./coded-error";
 import { type Project, parseName, type WorktreeName, worktreePath } from "./project";
-
-const CLI = resolve(import.meta.dir, "cli.ts");
 
 const scratchDirs: string[] = [];
 
@@ -34,18 +32,6 @@ export function scratchDir(): string {
 export function removeScratchDirs(): void {
   for (const dir of scratchDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
   scriptFiles.clear();
-}
-
-type Run = { readonly status: number | null; readonly stdout: string; readonly stderr: string };
-
-export function cli(cwd: string, args: readonly string[], stdin: string | null = null): Run {
-  const run = spawnSync(process.execPath, [CLI, ...args], {
-    cwd,
-    encoding: "utf8",
-    input: stdin ?? undefined,
-    env: { ...process.env, FORCE_COLOR: "3" },
-  });
-  return { status: run.status, stdout: run.stdout, stderr: run.stderr };
 }
 
 export function git(cwd: string, args: readonly string[]): string {

@@ -8,6 +8,7 @@ import {
   type ImportDeclaration,
   isNode,
   type Node,
+  type Statement,
   type StringLiteral,
 } from "@babel/types";
 
@@ -108,6 +109,27 @@ const ENTRY = "cli";
 
 const PROCESS_RUNNERS = new Set(["git", "scripts"]);
 
+const TEST_PROCESS_RUNNERS = new Set(["cli.test.ts", "repo.test-support.ts"]);
+
+const ERROR_CLASS = /Error$/;
+
+const CODED_ERROR = "CodedError";
+
+const BUILTIN_ERRORS = new Set([
+  "Error",
+  "AggregateError",
+  "EvalError",
+  "RangeError",
+  "ReferenceError",
+  "SyntaxError",
+  "TypeError",
+  "URIError",
+]);
+
+const CODED_ERROR_FILE = "coded-error.ts";
+
+const UNREACHABLE = "unreachable";
+
 const PROCESS_PACKAGES = new Set(["node:child_process", "child_process"]);
 
 const BUN_PACKAGE = "bun";
@@ -186,9 +208,51 @@ function startsProcess({ path, typeOnly, names }: Import): boolean {
 
 function processBreaches(file: string, text: string): readonly string[] {
   const owner = ownerOf(file.replace(/\.ts$/, ""));
-  if (owner !== null && PROCESS_RUNNERS.has(owner)) return [];
+  if (TEST_PROCESS_RUNNERS.has(file) || (owner !== null && PROCESS_RUNNERS.has(owner))) return [];
   const starts = importsOf(text).some(startsProcess) || [...nodesOf(text)].some(spawnsWithBun);
   return starts ? [`${file} starts a process`] : [];
+}
+
+function isPlainError(node: Node | null | undefined): boolean {
+  return node?.type === "Identifier" && ERROR_CLASS.test(node.name) && node.name !== CODED_ERROR;
+}
+
+function makesPlainError(node: Node): boolean {
+  if (node.type === "NewExpression") return isPlainError(node.callee);
+  if (node.type === "CallExpression")
+    return node.callee.type === "Identifier" && BUILTIN_ERRORS.has(node.callee.name);
+  if (node.type === "ClassDeclaration" || node.type === "ClassExpression")
+    return isPlainError(node.superClass);
+  return false;
+}
+
+function errorBreaches(file: string, text: string): readonly string[] {
+  if (file === CODED_ERROR_FILE) return [];
+  return [...nodesOf(text)].some(makesPlainError) ? [`${file} makes an error that is not coded`] : [];
+}
+
+function callsUnreachable(statement: Statement | undefined): boolean {
+  const call =
+    statement?.type === "ReturnStatement"
+      ? statement.argument
+      : statement?.type === "ExpressionStatement"
+        ? statement.expression
+        : null;
+  return (
+    call?.type === "CallExpression" && call.callee.type === "Identifier" && call.callee.name === UNREACHABLE
+  );
+}
+
+function endsInUnreachable(node: Node): boolean {
+  if (node.type !== "SwitchStatement") return true;
+  const last = node.cases.at(-1);
+  return last !== undefined && last.test === null && callsUnreachable(last.consequent[0]);
+}
+
+function switchBreaches(file: string, text: string): readonly string[] {
+  return [...nodesOf(text)].every(endsInUnreachable)
+    ? []
+    : [`${file} has a switch that does not end in unreachable`];
 }
 
 describe("the modules", () => {
@@ -196,8 +260,16 @@ describe("the modules", () => {
     expect(allSources().flatMap(({ file, text }) => boundaryBreaches(file, text))).toEqual([]);
   });
 
-  test("only git and scripts start a process", () => {
-    expect(moduleSources().flatMap(({ file, text }) => processBreaches(file, text))).toEqual([]);
+  test("only git and scripts start a process, and among the tests only cli.test.ts and the repo fixtures", () => {
+    expect(allSources().flatMap(({ file, text }) => processBreaches(file, text))).toEqual([]);
+  });
+
+  test("a module makes no error but a coded one", () => {
+    expect(moduleSources().flatMap(({ file, text }) => errorBreaches(file, text))).toEqual([]);
+  });
+
+  test("every switch in a module ends in unreachable", () => {
+    expect(moduleSources().flatMap(({ file, text }) => switchBreaches(file, text))).toEqual([]);
   });
 });
 
@@ -276,6 +348,10 @@ describe("the module checks", () => {
     }
     expect(processBreaches("git.ts", 'import { spawnSync } from "node:child_process";')).toEqual([]);
     expect(processBreaches("git-parse.ts", 'import { spawnSync } from "node:child_process";')).toEqual([]);
+    expect(processBreaches("cli.test.ts", 'import { spawnSync } from "node:child_process";')).toEqual([]);
+    expect(processBreaches("worktrees.test.ts", 'import { spawnSync } from "node:child_process";')).toEqual([
+      "worktrees.test.ts starts a process",
+    ]);
     for (const text of [
       'const help = "Bun.spawn(x)";',
       'import { Glob } from "bun";',
@@ -287,6 +363,47 @@ describe("the module checks", () => {
       'Bun["file"]("x");',
     ]) {
       expect(processBreaches("ledger.ts", text)).toEqual([]);
+    }
+  });
+
+  test("catch an error that is not coded, however it is made", () => {
+    for (const text of [
+      'throw new Error("x");',
+      'throw Error("x");',
+      'throw new TypeError("x");',
+      "class Refusal extends Error {}",
+      "const Refusal = class extends Error {};",
+    ]) {
+      expect(errorBreaches("ledger.ts", text)).toEqual(["ledger.ts makes an error that is not coded"]);
+    }
+    for (const text of [
+      'throw refuse("x", {});',
+      "const e = new CodedError();",
+      "if (error instanceof Error) throw error;",
+      "writeError(null, error);",
+    ]) {
+      expect(errorBreaches("ledger.ts", text)).toEqual([]);
+    }
+    expect(errorBreaches("coded-error.ts", "class CodedError extends Error {}")).toEqual([]);
+  });
+
+  test("catch a switch that does not end in unreachable", () => {
+    for (const text of [
+      'function f(x) { switch (x) { case "a": return 1; } }',
+      'function f(x) { switch (x) { case "a": return unreachable(x); } }',
+      'function f(x) { switch (x) { case "a": return 1; default: return 0; } }',
+      'function f(x) { switch (x) { default: return unreachable(x); case "a": return 1; } }',
+      'function f(x) { switch (x) { case "a": return 1; default: log(x); return unreachable(x); } }',
+    ]) {
+      expect(switchBreaches("hook.ts", text)).toEqual([
+        "hook.ts has a switch that does not end in unreachable",
+      ]);
+    }
+    for (const text of [
+      'function f(x) { switch (x) { case "a": return 1; default: return unreachable(x); } }',
+      'function f(x) { switch (x) { case "a": return; default: unreachable(x); } }',
+    ]) {
+      expect(switchBreaches("hook.ts", text)).toEqual([]);
     }
   });
 });

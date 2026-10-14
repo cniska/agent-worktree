@@ -1,7 +1,22 @@
 import { afterAll, describe, expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
 import { existsSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { cli, fixture, hookEvent, removeScratchDirs, repo, scratchDir } from "./repo.test-support";
+import { join, resolve } from "node:path";
+import { fixture, hookEvent, removeScratchDirs, repo, scratchDir } from "./repo.test-support";
+
+const CLI = resolve(import.meta.dir, "cli.ts");
+
+type Run = { readonly status: number | null; readonly stdout: string; readonly stderr: string };
+
+function cli(cwd: string, args: readonly string[], stdin: string | null = null): Run {
+  const run = spawnSync(process.execPath, [CLI, ...args], {
+    cwd,
+    encoding: "utf8",
+    input: stdin ?? undefined,
+    env: { ...process.env, FORCE_COLOR: "3" },
+  });
+  return { status: run.status, stdout: run.stdout, stderr: run.stderr };
+}
 
 afterAll(removeScratchDirs);
 
