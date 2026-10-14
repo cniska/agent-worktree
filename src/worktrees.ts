@@ -113,15 +113,26 @@ const refuse = refuser<{
   },
 });
 
+function goneState(
+  project: Project,
+  name: WorktreeName,
+  worktree: Worktree | null,
+  listed: ReadonlyMap<string, Worktree>,
+): Registered {
+  const legacy = listed.get(legacyPath(project, name));
+  if (legacy !== undefined) return { kind: "legacy", name, worktree: legacy };
+  return { kind: "orphaned", name, worktree };
+}
+
 function registeredState(
+  project: Project,
   registered: Entry,
   present: boolean,
   worktree: Worktree | null,
-  legacy: Worktree | null,
+  listed: ReadonlyMap<string, Worktree>,
 ): Registered {
   const { name } = registered;
-  if (!present && legacy !== null) return { kind: "legacy", name, worktree: legacy };
-  if (!present) return { kind: "orphaned", name, worktree };
+  if (!present) return goneState(project, name, worktree, listed);
   if (worktree === null) return { kind: "unlisted", name };
   return { kind: registered.ready ? "ready" : "pending", name, worktree };
 }
@@ -156,7 +167,7 @@ function stateIn({ found, entries, listed }: Snapshot, project: Project, name: s
   if (registered === null && !present) return { kind: "absent" };
   const worktree = listed.get(path) ?? null;
   if (registered === null) return { kind: "unmanaged", name, worktree };
-  return registeredState(registered, present, worktree, listed.get(legacyPath(project, name)) ?? null);
+  return registeredState(project, registered, present, worktree, listed);
 }
 
 function stateAt(project: Project, name: WorktreeName): State {
@@ -279,9 +290,13 @@ export function list(project: Project): readonly Listed[] {
     .map((name) => {
       const state = stateIn(snap, project, name);
       invariant(state.kind !== "absent", `${name} is in the snapshot`);
-      return { path: state.kind === "legacy" ? state.worktree.path : worktreePath(project, name), state };
+      return { path: pathOf(project, state), state };
     })
     .sort(byName);
+}
+
+function pathOf(project: Project, state: Listed["state"]): string {
+  return state.kind === "legacy" ? state.worktree.path : worktreePath(project, state.name);
 }
 
 function byName(a: Listed, b: Listed): number {

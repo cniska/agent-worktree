@@ -1,7 +1,7 @@
 import { homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
 
-export type Env = Readonly<Record<string, string | undefined>>;
+type Env = Readonly<Record<string, string | undefined>>;
 
 const DATA_NAME = "agent-worktree";
 
