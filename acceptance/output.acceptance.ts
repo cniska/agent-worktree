@@ -1,6 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
 import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
+import { version } from "../package.json";
 import {
   hookEvent,
   ls,
@@ -31,6 +32,7 @@ const USAGES = [
   "agent-worktree path <name>",
   "agent-worktree hook",
   INSTALL_USAGE,
+  "agent-worktree --version",
 ];
 
 test("AC-24 results, refusals and usage errors exit 0, 1 and 2 with their output", () => {
@@ -50,7 +52,7 @@ test("AC-24 results, refusals and usage errors exit 0, 1 and 2 with their output
   });
   expect(usageRefused(run(w, p.dir, ["task-a"]), null)).toEqual({
     message: "task-a is not an agent-worktree command; agent-worktree with no command lists them",
-    act: "agent-worktree create|init|remove|prune|ls|path|hook|install",
+    act: "agent-worktree create|init|remove|prune|ls|path|hook|install|--version",
   });
   expect(existsSync(p.path("task-a"))).toBe(false);
   const unknownOption = usageRefused(run(w, p.dir, ["remove", "--bogus", "task-a"]), "remove");
@@ -114,4 +116,13 @@ test("AC-28 the commands work with the network unavailable", () => {
   expect(succeeded(run(w, p.dir, ["prune"]))).toEqual([]);
   const stdin = hookEvent({ hook_event_name: "WorktreeCreate", name: "task-b" });
   expect(succeeded(run(w, p.dir, ["hook"], { stdin }))).toEqual([p.path("task-b")]);
+});
+
+test("AC-47 --version prints the version alone, and refuses an argument after it", () => {
+  const w = world();
+  expect(run(w, w.root, ["--version"])).toEqual({ exitCode: 0, stdout: `${version}\n`, stderr: "" });
+  expect(usageRefused(run(w, w.root, ["--version", "now"]), null)).toEqual({
+    message: "agent-worktree --version takes no argument, and got: now",
+    act: "agent-worktree --version",
+  });
 });

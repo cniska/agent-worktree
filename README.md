@@ -97,6 +97,7 @@ git worktree remove ../<name>
 | `agent-worktree path <name>` | Print the worktree's path. |
 | `agent-worktree hook` | The plugin's `WorktreeCreate` and `WorktreeRemove` entry: reads the event from stdin. |
 | `agent-worktree install [--local] [--setup <command>] [--teardown <command>] [--ports <n>]` | Write the hook each option names into `.worktree-hooks/`, or with `--local` into the clone's git directory, leaving the others as they are, and print each path. |
+| `agent-worktree --version` | Print the version alone on one line. |
 
 Results go to stdout. A refusal goes to stderr with the act that resolves it, and exits 1; a usage error exits 2.
 

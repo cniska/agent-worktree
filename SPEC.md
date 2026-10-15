@@ -94,7 +94,7 @@ Two agents in one checkout overwrite each other's files, so parallel work needs 
 - **FR-46** — A result goes to stdout, one line per item, and exits 0.
 - **FR-47** — A refusal goes to stderr as `agent-worktree <command>: <message>`, or `agent-worktree: <message>` for an unknown command, and, on the next line, the act that resolves it, and exits 1.
 - **FR-48** — An unknown command, an unknown option, or a wrong number of arguments is refused with the usage as the act, and exits 2.
-- **FR-49** — `agent-worktree` with no command, or with `--help`, lists every command with its usage and summary; `<command> --help` prints that command's.
+- **FR-49** — `agent-worktree` with no command, or with `--help`, lists every command with its usage and summary, and `--version` (FR-66) the same way; `<command> --help` prints that command's.
 - **FR-50** — Every error is a refusal, with a code, a message naming what was refused and why, and the act that resolves it, or a fault, whose act is to hand it to the owner.
 
 ### 2.12 Port blocks
@@ -117,6 +117,10 @@ Two agents in one checkout overwrite each other's files, so parallel work needs 
 - **FR-63** — `install` with no option but `--local`, with an empty command, or with a `--ports` that is not a whole number from 1 to 1000 is refused with the usage, and writes nothing.
 - **FR-64** — `install --local` writes the same hooks into `worktree-hooks/` in the git common directory instead, never into the tree, so nothing is committed and every checkout of the clone shares them.
 - **FR-65** — A local hook takes the place of the committed hook of the same name in every checkout of the clone; a hook the clone lacks locally is read from the checkout as FR-32 says.
+
+### 2.14 The version
+
+- **FR-66** — `agent-worktree --version` prints the running build's version, as `package.json` states it, alone on one line, and exits 0; with an argument after it, it is refused with its usage as the act, and exits 2.
 
 ## 3. Non-functional requirements
 
@@ -160,7 +164,7 @@ Two agents in one checkout overwrite each other's files, so parallel work needs 
 - **AC-22** — Do the keep act on it: `ls` reads it `ready` at its FR-1 path. Do the drop act on another: teardown ran with `WORKTREE_PATH` unset even when inherited, and `ls` no longer lists it; delete a third's directory and prune: teardown ran with its earlier path. (FR-33, FR-44, NF-2)
 - **AC-23** — An unregistered directory under `<primary>/.claude/worktrees`: absent from `ls`, untouched by `prune`. (FR-45)
 - **AC-24** — The CLI with a result, a refusal, an unknown command, an unknown option and too many arguments: exit 0 with stdout; exit 1 with the two-line refusal; exit 2 with the usage as the act. (FR-46, FR-47, FR-48, FR-50)
-- **AC-25** — The CLI with no command, `--help` and `remove --help`: every command's usage and summary, or the one. (FR-49)
+- **AC-25** — The CLI with no command, `--help` and `remove --help`: every command's usage and summary, then `--version`'s, or the one. (FR-49)
 - **AC-26** — Change state on disk between two commands, such as deleting a worktree's directory: the second command reads the change. (NF-1)
 - **AC-27** — The test environment's `HOME` and XDG directories are scratch directories, not the account's. (NF-3)
 - **AC-28** — The whole suite passes with the network unavailable. (NF-4)
@@ -182,6 +186,7 @@ Two agents in one checkout overwrite each other's files, so parallel work needs 
 - **AC-44** — `install --setup` with a command holding a quote, `--teardown` and `--ports 20`: it prints the three paths under `.worktree-hooks/`, each holding its command; `create` runs the setup command with the FR-33 variables and a block of two units, and `remove` runs the teardown command; the setup hook run by hand with no agent-worktree on `PATH` runs its command; `install --teardown` with another command: the teardown hook holds it and the setup and ports hooks are unchanged. (FR-32, FR-62)
 - **AC-45** — `install` with no option, with `--setup ""`, and with `--ports 0` and `--ports ten`: exit 2 with the usage, and no `.worktree-hooks/` written. (FR-63)
 - **AC-46** — In a clone whose committed hooks are a setup and a teardown, `install --local --setup` and `--ports 10`: it prints the two paths under `worktree-hooks/` in the git common directory and `git status` stays clean; `create` runs the local setup, not the committed one, with a block of one unit; `remove` runs the committed teardown; `create` run from inside a task worktree runs the local setup too. (FR-64, FR-65)
+- **AC-47** — `--version`, then `--version` with an argument after it: the version alone on stdout with exit 0 and nothing on stderr, then exit 2 with the usage as the act. (FR-66)
 
 ## 6. Deliverables
 
