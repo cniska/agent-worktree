@@ -12,5 +12,5 @@ Owns the lifecycle of a task checkout: a git worktree a project's own scripts se
 - A refusal is a coded error that names what was refused, its cause and the act that resolves it, and a rerun after that act converges. State is read from the ledger and the filesystem on every command, never remembered.
 - Fix the cause, never work around it, and add no debt. Debt you find is fixed where it is found.
 - Code carries no comments, tool contracts aside. A why goes into a name, a test, or the README.
-- Commit directly to `main`, in Conventional Commits.
-- Push each commit to `main` once `bun run check` passes and a fresh reviewer accepts it; that accept is the owner's standing sign-off, so no push waits on them.
+- Work each task on a topic branch in its own worktree. Commit each slice there, in Conventional Commits, once `bun run check` passes and a fresh reviewer accepts it, and push the branch after each.
+- Land a task as a whole, with no pull request: once a fresh reviewer, given the branch's whole diff against `main`, accepts it (for a one-commit branch, that commit's accept), fast-forward `main` to the branch, push `main` and delete the branch on origin. That accept is the owner's standing sign-off, so no landing waits on them.
