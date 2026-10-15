@@ -4,7 +4,13 @@ import { join } from "node:path";
 
 const ROOT = join(import.meta.dir, "..");
 
-const GUARDED_DIRS = ["src", "acceptance", "plugin", "examples"];
+const GUARDED_DIRS = ["src", "acceptance", "plugin", "examples", "scripts", "npm", "docs"];
+
+const SELF = "scripts/standalone.test.ts";
+
+const WORKFLOWS = ".github/workflows";
+
+const INSTALLED_WORKFLOW = "# agent-gate:";
 
 const GUARDED_FILES = ["SPEC.md", "README.md"];
 
@@ -44,14 +50,25 @@ function namings({ path, text }: Guarded): readonly string[] {
   });
 }
 
+function filesUnder(dir: string): readonly string[] {
+  return [...new Bun.Glob("**/*").scanSync({ cwd: join(ROOT, dir), dot: true })].map((path) =>
+    join(dir, path),
+  );
+}
+
+function ownWorkflow({ text }: Guarded): boolean {
+  return !text.startsWith(INSTALLED_WORKFLOW);
+}
+
+function read(path: string): Guarded {
+  return { path, text: readFileSync(join(ROOT, path), "utf8") };
+}
+
 function guardedFiles(): readonly Guarded[] {
-  const paths = [
-    ...GUARDED_DIRS.flatMap((dir) =>
-      [...new Bun.Glob("**/*").scanSync({ cwd: join(ROOT, dir), dot: true })].map((path) => join(dir, path)),
-    ),
-    ...GUARDED_FILES,
-  ];
-  return paths.sort().map((path) => ({ path, text: readFileSync(join(ROOT, path), "utf8") }));
+  const paths = [...GUARDED_DIRS.flatMap(filesUnder), ...GUARDED_FILES].filter((path) => path !== SELF);
+  return [...paths.map(read), ...filesUnder(WORKFLOWS).map(read).filter(ownWorkflow)].sort((a, b) =>
+    a.path.localeCompare(b.path),
+  );
 }
 
 describe("the repo stands alone", () => {
@@ -67,6 +84,18 @@ describe("the repo stands alone", () => {
       "README.md:11 names another tool: cniska-skills",
     ]);
     expect(namings({ path: "SPEC.md", text })).toHaveLength(4);
+  });
+
+  test("guards the release paths and the workflows it owns, but not itself or a workflow another tool installs", () => {
+    const paths = guardedFiles().map(({ path }) => path);
+    expect(paths).toContain("scripts/install.sh");
+    expect(paths).toContain("npm/agent-worktree.cjs");
+    expect(paths).toContain("docs/releasing.md");
+    expect(paths).toContain(".github/workflows/release.yml");
+    expect(paths).toContain(".github/workflows/check.yml");
+    expect(paths).not.toContain(SELF);
+    expect(ownWorkflow({ path: "x.yml", text: "# agent-gate:made-up:1\nname: X\n" })).toBe(false);
+    expect(ownWorkflow({ path: "x.yml", text: "name: X\n# agent-gate:made-up:1\n" })).toBe(true);
   });
 
   test("names its own tool freely, and a project however it is spelled", () => {
