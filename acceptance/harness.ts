@@ -12,13 +12,17 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 
 const ENTRY = join(import.meta.dir, "..", "src", "cli.ts");
 
 const BUILD_COMPILED = join(import.meta.dir, "..", "scripts", "build-compiled.sh");
 
 const NO_TRANSPILER_CACHE = "0";
+
+export const SYSTEM_PATH = "/usr/bin:/bin:/usr/sbin:/sbin";
+
+const RELEASE_DOWNLOADS = "https://github.com/cniska/agent-worktree/releases/latest/download";
 
 type Env = Readonly<Record<string, string>>;
 
@@ -117,7 +121,7 @@ export function compiledBinary(dir: string): string {
   const binary = join(dir, "agent-worktree");
   const built = spawnSync("bash", [BUILD_COMPILED, binary], {
     encoding: "utf8",
-    env: { PATH: `${dirname(process.execPath)}:/usr/bin:/bin` },
+    env: { PATH: `${dirname(process.execPath)}:${SYSTEM_PATH}` },
   });
   if (built.status !== 0) throw new Error(`build-compiled.sh exited ${built.status}: ${built.stderr}`);
   return binary;
@@ -136,6 +140,42 @@ export function toolsOnly(w: World, tools: readonly string[]): string {
 
 export function runOnPath(w: World, cwd: string, path: string, args: readonly string[]): Ran {
   return spawn(w, cwd, ["agent-worktree", ...args], { env: { PATH: path } });
+}
+
+export function runProgram(w: World, cwd: string, argv: readonly string[], env: Env): Ran {
+  return spawn(w, cwd, argv, { env });
+}
+
+export function releaseAssets(dir: string, binary: string, target: string): string {
+  mkdirSync(dir, { recursive: true });
+  const tarball = join(dir, `agent-worktree-${target}.tar.gz`);
+  const packed = spawnSync("tar", ["-czf", tarball, "-C", dirname(binary), basename(binary)], {
+    encoding: "utf8",
+  });
+  if (packed.status !== 0) throw new Error(`tar exited ${packed.status}: ${packed.stderr}`);
+  const digest = new Bun.CryptoHasher("sha256").update(readFileSync(tarball)).digest("hex");
+  writeFileSync(join(dir, `agent-worktree-${target}.sha256`), `${digest}  agent-worktree-${target}.tar.gz\n`);
+  return dir;
+}
+
+export function curlServing(bin: string, assets: string): string {
+  mkdirSync(bin, { recursive: true });
+  const curl = join(bin, "curl");
+  writeFileSync(
+    curl,
+    [
+      "#!/bin/sh",
+      "url=; out=",
+      'while [ "$#" -gt 0 ]; do case "$1" in -o) out="$2"; shift ;; https://*) url="$1" ;; esac; shift; done',
+      `file="${assets}/\${url##*/}"`,
+      `case "$url" in ${RELEASE_DOWNLOADS}/*) ;; *) exit 22 ;; esac`,
+      '[ -f "$file" ] || exit 22',
+      'cp "$file" "$out"',
+      "",
+    ].join("\n"),
+  );
+  chmodSync(curl, 0o755);
+  return bin;
 }
 
 const LAUNCHER = join(import.meta.dir, "..", "bin", "agent-worktree");

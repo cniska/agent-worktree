@@ -125,6 +125,8 @@ Two agents in one checkout overwrite each other's files, so parallel work needs 
 ### 2.15 The release build
 
 - **FR-67** — `scripts/build-compiled.sh <outfile>` compiles the CLI into one executable that carries the version, so it runs every command with git alone, with no checkout of agent-worktree and no Bun on the machine.
+- **FR-68** — `install.sh`, run by `curl … | sh`, downloads the latest release's build for this platform, checks it against its published sha256, runs it for its version, and installs it as `~/.local/bin/agent-worktree`, writing it beside that path and renaming it into place. A download that fails, does not match its checksum, or reports a version that is not `x.y.z` installs nothing. Run again, it replaces the install.
+- **FR-69** — The npm package `@cniska/agent-worktree` installs the build for its platform from `@cniska/agent-worktree-darwin-arm64` or `@cniska/agent-worktree-linux-x64` and runs it with the arguments it was given, exiting as it exits. On another platform, with the platform package missing, or with a platform build that cannot start, it refuses as FR-47 says, naming the cause.
 
 ## 3. Non-functional requirements
 
@@ -192,13 +194,15 @@ Two agents in one checkout overwrite each other's files, so parallel work needs 
 - **AC-46** — In a clone whose committed hooks are a setup and a teardown, `install --local --setup` and `--ports 10`: it prints the two paths under `worktree-hooks/` in the git common directory and `git status` stays clean; `create` runs the local setup, not the committed one, with a block of one unit; `remove` runs the committed teardown; `create` run from inside a task worktree runs the local setup too. (FR-64, FR-65)
 - **AC-47** — `--version`, then `--version` with an argument after it: the version alone on stdout with exit 0 and nothing on stderr, then exit 2 with the usage as the act. (FR-66)
 - **AC-48** — Compile the release binary and run it with only its own directory and git on `PATH`: `--version` prints the version, `create task-a` in a fresh repository prints the worktree's path, and `remove task-a` removes it. (FR-67)
+- **AC-49** — Run `install.sh` in a fresh home against a stand-in for the release downloads, twice, then once with a wrong checksum in another fresh home, then against builds that report an empty version, `1.2.3.4` and `../x`: the installed `agent-worktree --version` prints the release's version and `~/.local/bin` holds only it, and the bad download and each mislabelled build are refused with nothing written. (FR-68)
+- **AC-50** — Build the npm packages from a release build, install the shim into a prefix and run it through Node, first with its manifest naming only another platform's package, then without its platform package, then with it unexecutable, then whole: the first three are refused, each naming its cause and exiting 1; then `--version` prints the package version and `create task-a` prints the worktree's path. (FR-69)
 
 ## 6. Deliverables
 
-- **D-1** — The `agent-worktree` CLI, run by Bun from a checkout and linked onto `PATH` by `mise install` in the primary checkout, never in a worktree.
+- **D-1** — The `agent-worktree` CLI, run by Bun from a checkout and linked onto `PATH` by `mise install` in the primary checkout, never in a worktree, and the release binary `scripts/build-compiled.sh` compiles from it for darwin-arm64 and linux-x64, shipped by a GitHub release with `install.sh`, by the npm packages and by the `cniska/tap` Homebrew formula, as [`docs/releasing.md`](docs/releasing.md) says.
 - **D-2** — The `cniska-worktree` Claude Code plugin in `plugin/`.
-- **D-3** — `README.md`, `AGENTS.md`, `src/README.md` and this spec.
-- **D-4** — The test suite, run by `bun run check`, and the acceptance suite, run by `bun run acceptance`, whose test names cite the criteria in §5. The acceptance suite drives the CLI from source and the compiled release binary.
+- **D-3** — `README.md`, `AGENTS.md`, `src/README.md`, `docs/releasing.md` and this spec.
+- **D-4** — The test suite, run by `bun run check`, and the acceptance suite, run by `bun run acceptance`, whose test names cite the criteria in §5. The acceptance suite drives the CLI from source, the compiled release binary, `install.sh` against a stand-in for the release downloads, and the npm packages through Node.
 
 ## 7. Constraints (fixed)
 
