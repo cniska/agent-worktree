@@ -251,7 +251,9 @@ describe("a branch kept", () => {
     git(dir, ["config", "protocol.ext.allow", "always"]);
     git(dir, ["remote", "add", "origin", "ext::sleep 5"]);
     topic(dir, "task-a", "work");
+    const started = performance.now();
     const fate = settleBranch(dir, "task-a", remotesOf(dir, 200));
+    expect(performance.now() - started).toBeLessThan(2000);
     expect(fateText(fate)).toBe("branch task-a kept, origin could not be reached: timed out after 0.2s");
     expect(localBranches(dir)).toBe("task-a");
   });
