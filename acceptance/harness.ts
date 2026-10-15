@@ -8,12 +8,15 @@ import {
   readFileSync,
   realpathSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
 const ENTRY = join(import.meta.dir, "..", "src", "cli.ts");
+
+const BUILD_COMPILED = join(import.meta.dir, "..", "scripts", "build-compiled.sh");
 
 const NO_TRANSPILER_CACHE = "0";
 
@@ -107,6 +110,32 @@ export function runAtOnce(
 
 export function run(w: World, cwd: string, args: readonly string[], options: RunOptions = {}): Ran {
   return spawn(w, cwd, [process.execPath, ENTRY, ...args], options);
+}
+
+export function compiledBinary(dir: string): string {
+  mkdirSync(dir, { recursive: true });
+  const binary = join(dir, "agent-worktree");
+  const built = spawnSync("bash", [BUILD_COMPILED, binary], {
+    encoding: "utf8",
+    env: { PATH: `${dirname(process.execPath)}:/usr/bin:/bin` },
+  });
+  if (built.status !== 0) throw new Error(`build-compiled.sh exited ${built.status}: ${built.stderr}`);
+  return binary;
+}
+
+export function toolsOnly(w: World, tools: readonly string[]): string {
+  const bin = join(w.root, "tools");
+  mkdirSync(bin, { recursive: true });
+  for (const tool of tools) {
+    const found = Bun.which(tool, { PATH: w.env.PATH });
+    if (found === null) throw new Error(`${tool} is not on PATH`);
+    symlinkSync(found, join(bin, tool));
+  }
+  return bin;
+}
+
+export function runOnPath(w: World, cwd: string, path: string, args: readonly string[]): Ran {
+  return spawn(w, cwd, ["agent-worktree", ...args], { env: { PATH: path } });
 }
 
 const LAUNCHER = join(import.meta.dir, "..", "bin", "agent-worktree");

@@ -122,6 +122,10 @@ Two agents in one checkout overwrite each other's files, so parallel work needs 
 
 - **FR-66** — `agent-worktree --version` prints the running build's version, as `package.json` states it, alone on one line, and exits 0; with an argument after it, it is refused with its usage as the act, and exits 2.
 
+### 2.15 The release build
+
+- **FR-67** — `scripts/build-compiled.sh <outfile>` compiles the CLI into one executable that carries the version, so it runs every command with git alone, with no checkout of agent-worktree and no Bun on the machine.
+
 ## 3. Non-functional requirements
 
 - **NF-1** — Every command reads the ledger, the filesystem and git afresh; nothing is remembered between commands.
@@ -187,13 +191,14 @@ Two agents in one checkout overwrite each other's files, so parallel work needs 
 - **AC-45** — `install` with no option, with `--setup ""`, and with `--ports 0` and `--ports ten`: exit 2 with the usage, and no `.worktree-hooks/` written. (FR-63)
 - **AC-46** — In a clone whose committed hooks are a setup and a teardown, `install --local --setup` and `--ports 10`: it prints the two paths under `worktree-hooks/` in the git common directory and `git status` stays clean; `create` runs the local setup, not the committed one, with a block of one unit; `remove` runs the committed teardown; `create` run from inside a task worktree runs the local setup too. (FR-64, FR-65)
 - **AC-47** — `--version`, then `--version` with an argument after it: the version alone on stdout with exit 0 and nothing on stderr, then exit 2 with the usage as the act. (FR-66)
+- **AC-48** — Compile the release binary and run it with only its own directory and git on `PATH`: `--version` prints the version, `create task-a` in a fresh repository prints the worktree's path, and `remove task-a` removes it. (FR-67)
 
 ## 6. Deliverables
 
 - **D-1** — The `agent-worktree` CLI, run by Bun from a checkout and linked onto `PATH` by `mise install` in the primary checkout, never in a worktree.
 - **D-2** — The `cniska-worktree` Claude Code plugin in `plugin/`.
 - **D-3** — `README.md`, `AGENTS.md`, `src/README.md` and this spec.
-- **D-4** — The test suite, run by `bun run check`, and the acceptance suite, run by `bun run acceptance`, whose test names cite the criteria in §5.
+- **D-4** — The test suite, run by `bun run check`, and the acceptance suite, run by `bun run acceptance`, whose test names cite the criteria in §5. The acceptance suite drives the CLI from source and the compiled release binary.
 
 ## 7. Constraints (fixed)
 
