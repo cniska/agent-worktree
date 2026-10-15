@@ -20,12 +20,7 @@ const CONTRIBUTOR_SECTION = "## Development";
 
 const SUGGESTED = /^(cniska-skills|agent-skills)$/;
 
-type Naming = { readonly names: string; readonly pattern: RegExp };
-
-const NAMINGS: readonly Naming[] = [
-  { names: "another tool", pattern: /\b(cniska-(skills|record|gates)|agent-(record|gates|skills))\b/g },
-  { names: "a project that uses it", pattern: /hoodly/gi },
-];
+const OTHER_TOOL = /\b(cniska-(skills|record|gates)|agent-(record|gates|skills))\b/g;
 
 type Guarded = { readonly path: string; readonly text: string };
 
@@ -42,11 +37,9 @@ function namings({ path, text }: Guarded): readonly string[] {
   const suggesting = path === README ? contributorLines(text) : new Set<number>();
   return text.split("\n").flatMap((line, index) => {
     const at = index + 1;
-    return NAMINGS.flatMap(({ names, pattern }) =>
-      [...line.matchAll(pattern)]
-        .filter(([match]) => !(suggesting.has(at) && SUGGESTED.test(match)))
-        .map(([match]) => `${path}:${at} names ${names}: ${match}`),
-    );
+    return [...line.matchAll(OTHER_TOOL)]
+      .filter(([match]) => !(suggesting.has(at) && SUGGESTED.test(match)))
+      .map(([match]) => `${path}:${at} names another tool: ${match}`);
   });
 }
 
@@ -72,7 +65,7 @@ function guardedFiles(): readonly Guarded[] {
 }
 
 describe("the repo stands alone", () => {
-  test("names no other tool or project that uses it", () => {
+  test("names no other tool", () => {
     expect(guardedFiles().flatMap(namings)).toEqual([]);
   });
 
@@ -98,12 +91,11 @@ describe("the repo stands alone", () => {
     expect(ownWorkflow({ path: "x.yml", text: "name: X\n# agent-gate:made-up:1\n" })).toBe(true);
   });
 
-  test("names its own tool freely, and a project however it is spelled", () => {
-    const text = "agent-worktree and cniska-worktree\nlike Hoodly's ports\nagent-record, cniska-gates";
+  test("names another tool wherever it stands, its own names freely", () => {
+    const text = "agent-worktree and cniska-worktree\nagent-record, cniska-gates";
     expect(namings({ path: "src/x.ts", text })).toEqual([
-      "src/x.ts:2 names a project that uses it: Hoodly",
-      "src/x.ts:3 names another tool: agent-record",
-      "src/x.ts:3 names another tool: cniska-gates",
+      "src/x.ts:2 names another tool: agent-record",
+      "src/x.ts:2 names another tool: cniska-gates",
     ]);
   });
 });
