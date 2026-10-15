@@ -19,6 +19,7 @@ Another module reaches a module only through its bare-named file, so `cli`'s par
 | --- | --- |
 | `cli` | The `agent-worktree` command line, over the domain below |
 | `worktrees` | The lifecycle: create, init, remove, prune and list, from a worktree's state read fresh each time |
+| `branches` | Settle the branch of a removed worktree against its remote: whether it landed, and deleting it there and here |
 | `hook` | Parse a Claude Code `WorktreeCreate` or `WorktreeRemove` event into a worktree name |
 | `project` | The project a directory belongs to, worktree names, and where a worktree lives: under the data directory, keyed by project, or in the earlier location inside the primary |
 | `paths` | The XDG data directory, read from the environment on every call |

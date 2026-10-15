@@ -25,9 +25,7 @@ test("AC-10 remove tears down in the primary, removes the worktree and keeps a b
   script(w, p.dir, "worktree-teardown.sh", recording(record));
   const path = p.path("task-a");
   succeeded(run(w, p.dir, ["create", "task-a"]));
-  expect(succeeded(run(w, p.dir, ["remove", "task-a"]))).toEqual([
-    "branch task-a kept, no default branch tracked for origin",
-  ]);
+  expect(succeeded(run(w, p.dir, ["remove", "task-a"]))).toEqual(["branch task-a kept, no remote origin"]);
   expect(recorded(record)).toEqual([{ name: "task-a", path, primary: p.dir, cwd: p.dir }]);
   expect(existsSync(path)).toBe(false);
   expect(git(w, p.dir, ["branch", "--list", "task-a"])).toBe("task-a");
@@ -48,34 +46,77 @@ function branches(w: ReturnType<typeof world>, dir: string): string {
   return git(w, dir, ["for-each-ref", "--format=%(refname:short)", "refs/heads/task-*"]);
 }
 
-test("AC-40 remove and prune delete a branch merged into origin's default branch and keep an unmerged one", () => {
+function remoteHeads(w: ReturnType<typeof world>, bare: string): string {
+  return git(w, bare, ["for-each-ref", "--format=%(refname:short)", "refs/heads"]);
+}
+
+function squashIn(w: ReturnType<typeof world>, dir: string, branch: string): void {
+  git(w, dir, ["pull", "-q", "--ff-only", "origin", "main"]);
+  git(w, dir, ["merge", "-q", "--squash", branch]);
+  git(w, dir, ["commit", "-q", "-m", `squashed ${branch}`]);
+  git(w, dir, ["push", "-q", "origin", "main", `:${branch}`]);
+}
+
+test("AC-40 remove deletes a merged branch here and on origin, and keeps an unmerged one", () => {
   const w = world();
   const p = project(w);
-  bareRemote(w, p.dir);
-  for (const name of ["task-a", "task-b", "task-c", "task-d"]) succeeded(run(w, p.dir, ["create", name]));
+  const bare = bareRemote(w, p.dir);
+  for (const name of ["task-a", "task-b"]) succeeded(run(w, p.dir, ["create", name]));
   commitIn(w, p.path("task-a"), "merged");
-  git(w, p.dir, ["merge", "-q", "--ff-only", "task-a"]);
-  git(w, p.dir, ["push", "-q", "origin", "main"]);
+  git(w, p.path("task-a"), ["push", "-q", "-u", "origin", "task-a"]);
+  git(w, p.path("task-a"), ["push", "-q", bare, "task-a:main"]);
   expect(succeeded(run(w, p.dir, ["remove", "task-a"]))).toEqual([
-    "branch task-a deleted, merged into origin/main",
+    "branch task-a deleted, merged into origin/main, and origin/task-a deleted",
   ]);
+  expect(remoteHeads(w, bare)).toBe("main");
   commitIn(w, p.path("task-b"), "unmerged");
   writeFileSync(join(p.path("task-b"), "untracked"), "work\n");
   expect(succeeded(run(w, p.dir, ["remove", "--force", "task-b"]))).toEqual([
     "branch task-b kept, not merged into origin/main",
   ]);
+  expect(branches(w, p.dir)).toBe("task-b");
+});
+
+test("AC-40 remove deletes a squash-merged branch whose origin branch is gone, and keeps one with a commit since", () => {
+  const w = world();
+  const p = project(w);
+  bareRemote(w, p.dir);
+  for (const name of ["task-c", "task-e"]) succeeded(run(w, p.dir, ["create", name]));
   commitIn(w, p.path("task-c"), "squashed");
-  git(w, p.dir, ["merge", "-q", "--squash", "task-c"]);
-  git(w, p.dir, ["commit", "-q", "-m", "squashed"]);
-  git(w, p.dir, ["push", "-q", "origin", "main"]);
-  rmSync(p.path("task-c"), { recursive: true });
+  git(w, p.path("task-c"), ["push", "-q", "-u", "origin", "task-c"]);
+  squashIn(w, p.dir, "task-c");
+  expect(succeeded(run(w, p.dir, ["remove", "task-c"]))).toEqual([
+    "branch task-c deleted, squash-merged into origin/main",
+  ]);
+  commitIn(w, p.path("task-e"), "squashed-then-more");
+  git(w, p.path("task-e"), ["push", "-q", "-u", "origin", "task-e"]);
+  squashIn(w, p.dir, "task-e");
+  commitIn(w, p.path("task-e"), "more");
+  expect(succeeded(run(w, p.dir, ["remove", "task-e"]))).toEqual([
+    "branch task-e kept, not merged into origin/main",
+  ]);
+  expect(branches(w, p.dir)).toBe("task-e");
+});
+
+test("AC-40 prune settles the branches of worktrees deleted by hand, and an unreachable origin keeps a branch, naming why", () => {
+  const w = world();
+  const p = project(w);
+  bareRemote(w, p.dir);
+  for (const name of ["task-d", "task-f"]) succeeded(run(w, p.dir, ["create", name]));
+  commitIn(w, p.path("task-f"), "unmerged");
   rmSync(p.path("task-d"), { recursive: true });
+  rmSync(p.path("task-f"), { recursive: true });
   const pruned = run(w, p.dir, ["prune"]);
   expect(succeeded(pruned)).toEqual([]);
-  expect(pruned.stderr).toContain("agent-worktree: branch task-c kept, not merged into origin/main\n");
   expect(pruned.stderr).toContain("agent-worktree: branch task-d deleted, merged into origin/main\n");
-  expect(branches(w, p.dir)).toBe("task-b\ntask-c");
+  expect(pruned.stderr).toContain("agent-worktree: branch task-f kept, not merged into origin/main\n");
+  expect(branches(w, p.dir)).toBe("task-f");
   expect(ls(w, p.dir)).toEqual([]);
+  git(w, p.dir, ["remote", "set-url", "origin", join(w.root, "remotes", "missing.git")]);
+  succeeded(run(w, p.dir, ["create", "task-g"]));
+  const [unreached = ""] = succeeded(run(w, p.dir, ["remove", "task-g"]));
+  expect(unreached).toStartWith("branch task-g kept, origin could not be reached: ");
+  expect(branches(w, p.dir)).toBe("task-f\ntask-g");
 });
 
 test("AC-11 remove refuses dirty and submodule worktrees without force, and locked ones always", () => {
@@ -90,7 +131,7 @@ test("AC-11 remove refuses dirty and submodule worktrees without force, and lock
   });
   expect(existsSync(join(dirty, "untracked"))).toBe(true);
   expect(succeeded(run(w, p.dir, ["remove", "--force", "task-dirty"]))).toEqual([
-    "branch task-dirty kept, no default branch tracked for origin",
+    "branch task-dirty kept, no remote origin",
   ]);
   expect(existsSync(dirty)).toBe(false);
 
@@ -105,7 +146,7 @@ test("AC-11 remove refuses dirty and submodule worktrees without force, and lock
   });
   expect(existsSync(vendored)).toBe(true);
   expect(succeeded(run(w, p.dir, ["remove", "--force", "task-sub"]))).toEqual([
-    "branch task-sub kept, no default branch tracked for origin",
+    "branch task-sub kept, no remote origin",
   ]);
   expect(existsSync(vendored)).toBe(false);
 
@@ -134,7 +175,7 @@ test("AC-12 a failed teardown keeps the worktree, force removes it, and prune fi
   });
   expect(ls(w, p.dir)).toEqual([{ name: "task-a", state: "ready", branch: "task-a", path }]);
   expect(succeeded(run(w, p.dir, ["remove", "--force", "task-a"]))).toEqual([
-    "branch task-a kept, no default branch tracked for origin",
+    "branch task-a kept, no remote origin",
   ]);
   expect(existsSync(path)).toBe(false);
   expect(ls(w, p.dir).map(({ name, state }) => [name, state])).toEqual([["task-a", "orphaned (prune)"]]);

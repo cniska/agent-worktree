@@ -267,11 +267,11 @@ describe("remove", () => {
     expect(stateKind(f, "task-plain")).toBe("unmanaged");
   });
 
-  test("removes the worktree and keeps the branch when no remote tracks a default branch", async () => {
+  test("removes the worktree and keeps the branch when there is no remote", async () => {
     const f = fixture();
     const path = await create(f.project, f.name("task-a"));
     expect(remove(f.project, f.name("task-a"), false)).toEqual({
-      kind: "no_default_branch",
+      kind: "no_remote",
       branch: "task-a",
       remote: "origin",
     });
@@ -443,25 +443,25 @@ function branches(f: Fixture): string {
 }
 
 describe("the branch of a removed worktree", () => {
-  test("is deleted, with its upstream config, when the remote's default branch has its tip", async () => {
+  test("is deleted here and on the remote once it landed", async () => {
     const f = fixture();
-    withRemote(f.dir, "origin");
+    const bare = withRemote(f.dir, "origin");
     const path = await create(f.project, f.name("task-a"));
     commitIn(path, "work");
-    git(f.dir, ["merge", "-q", "--ff-only", "task-a"]);
-    git(f.dir, ["push", "-q", "origin", "main"]);
-    git(f.dir, ["config", "branch.task-a.remote", "origin"]);
-    git(f.dir, ["config", "branch.task-a.merge", "refs/heads/task-a"]);
+    git(path, ["push", "-q", "-u", "origin", "task-a"]);
+    git(path, ["push", "-q", "origin", "task-a:main"]);
     expect(remove(f.project, f.name("task-a"), false)).toEqual({
       kind: "deleted",
       branch: "task-a",
+      landing: "merged",
       into: "refs/remotes/origin/main",
+      upstream: "refs/remotes/origin/task-a",
     });
     expect(branches(f)).toBe("");
-    expect(git(f.dir, ["config", "--list"])).not.toContain("branch.task-a.");
+    expect(git(bare, ["for-each-ref", "--format=%(refname)", "refs/heads"])).toBe("refs/heads/main");
   });
 
-  test("is kept when its tip is not on the remote's default branch, even by force", async () => {
+  test("is kept when it has not landed, even by force", async () => {
     const f = fixture();
     withRemote(f.dir, "origin");
     const path = await create(f.project, f.name("task-a"));
@@ -471,85 +471,6 @@ describe("the branch of a removed worktree", () => {
       kind: "unmerged",
       branch: "task-a",
       into: "refs/remotes/origin/main",
-    });
-    expect(branches(f)).toBe("task-a");
-  });
-
-  test("is kept when it was squash-merged, so its tip is not reachable", async () => {
-    const f = fixture();
-    withRemote(f.dir, "origin");
-    const path = await create(f.project, f.name("task-a"));
-    commitIn(path, "work");
-    git(f.dir, ["merge", "-q", "--squash", "task-a"]);
-    git(f.dir, ["commit", "-q", "-m", "squashed"]);
-    git(f.dir, ["push", "-q", "origin", "main"]);
-    expect(remove(f.project, f.name("task-a"), false).kind).toBe("unmerged");
-    expect(branches(f)).toBe("task-a");
-  });
-
-  test("is judged against the refs as they are, with no fetch", async () => {
-    const f = fixture();
-    const bare = withRemote(f.dir, "origin");
-    const path = await create(f.project, f.name("task-a"));
-    const tip = commitIn(path, "work");
-    git(path, ["push", "-q", bare, "task-a:main"]);
-    expect(remove(f.project, f.name("task-a"), false).kind).toBe("unmerged");
-    expect(git(f.dir, ["rev-parse", "task-a"])).toBe(tip);
-  });
-
-  test("follows the remote's HEAD before its main", async () => {
-    const f = fixture();
-    withRemote(f.dir, "origin");
-    const path = await create(f.project, f.name("task-a"));
-    commitIn(path, "work");
-    git(f.dir, ["push", "-q", "origin", "task-a:trunk"]);
-    git(f.dir, ["fetch", "-q", "origin"]);
-    git(f.dir, ["symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/trunk"]);
-    expect(remove(f.project, f.name("task-a"), false)).toEqual({
-      kind: "deleted",
-      branch: "task-a",
-      into: "refs/remotes/origin/trunk",
-    });
-  });
-
-  test("falls back to master when the remote tracks no HEAD or main", async () => {
-    const f = fixture();
-    withRemote(f.dir, "origin");
-    git(f.dir, ["push", "-q", "origin", "main:master"]);
-    git(f.dir, ["update-ref", "-d", "refs/remotes/origin/main"]);
-    await create(f.project, f.name("task-a"));
-    expect(remove(f.project, f.name("task-a"), false)).toEqual({
-      kind: "deleted",
-      branch: "task-a",
-      into: "refs/remotes/origin/master",
-    });
-  });
-
-  test("is judged against its upstream's remote rather than origin", async () => {
-    const f = fixture();
-    withRemote(f.dir, "origin");
-    withRemote(f.dir, "fork");
-    const path = await create(f.project, f.name("task-a"));
-    commitIn(path, "work");
-    git(f.dir, ["push", "-q", "fork", "task-a:main"]);
-    git(f.dir, ["config", "branch.task-a.remote", "fork"]);
-    expect(remove(f.project, f.name("task-a"), false)).toEqual({
-      kind: "deleted",
-      branch: "task-a",
-      into: "refs/remotes/fork/main",
-    });
-  });
-
-  test("is kept while another worktree has it checked out", async () => {
-    const f = fixture();
-    withRemote(f.dir, "origin");
-    await create(f.project, f.name("task-a"));
-    const other = join(dirname(f.dir), "other");
-    git(f.dir, ["worktree", "add", "-q", "-f", other, "task-a"]);
-    expect(remove(f.project, f.name("task-a"), false)).toEqual({
-      kind: "checked_out",
-      branch: "task-a",
-      at: other,
     });
     expect(branches(f)).toBe("task-a");
   });

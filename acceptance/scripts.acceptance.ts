@@ -23,9 +23,7 @@ test("AC-16 a non-executable or unrunnable script is refused, and a project with
   const w = world();
   const p = project(w);
   expect(succeeded(run(w, p.dir, ["create", "task-a"]))).toEqual([p.path("task-a")]);
-  expect(succeeded(run(w, p.dir, ["remove", "task-a"]))).toEqual([
-    "branch task-a kept, no default branch tracked for origin",
-  ]);
+  expect(succeeded(run(w, p.dir, ["remove", "task-a"]))).toEqual(["branch task-a kept, no remote origin"]);
   expect(existsSync(p.path("task-a"))).toBe(false);
 
   const setup = join(p.dir, "scripts", "worktree-setup.sh");

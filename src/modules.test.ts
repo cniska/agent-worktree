@@ -79,6 +79,7 @@ function importsOf(text: string): readonly Import[] {
 const MODULES = [
   "cli",
   "worktrees",
+  "branches",
   "hook",
   "project",
   "ledger",

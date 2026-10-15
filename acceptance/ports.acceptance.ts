@@ -53,9 +53,7 @@ test("AC-31 remove gives teardown the block and frees it for the next create", a
   const [first] = await freeUnits();
   succeeded(run(w, p.dir, ["create", "task-a"]));
   succeeded(run(w, p.dir, ["create", "task-b"]));
-  expect(succeeded(run(w, p.dir, ["remove", "task-a"]))).toEqual([
-    "branch task-a kept, no default branch tracked for origin",
-  ]);
+  expect(succeeded(run(w, p.dir, ["remove", "task-a"]))).toEqual(["branch task-a kept, no remote origin"]);
   expect(portsRecorded(record)).toEqual([String(first)]);
   succeeded(run(w, p.dir, ["create", "task-c"]));
   expect(lsPorts(w, p.dir)["task-c"]).toBe(blockText(first));

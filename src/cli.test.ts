@@ -109,7 +109,7 @@ describe("the cli", () => {
     );
     expect(run).toEqual({
       status: 0,
-      stdout: "branch task-a kept, no default branch tracked for origin\n",
+      stdout: "branch task-a kept, no remote origin\n",
       stderr: "",
     });
     expect(existsSync(path("task-a"))).toBe(false);

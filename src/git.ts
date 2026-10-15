@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { invariant } from "./assert";
-import { refuser } from "./coded-error";
+import { refuser, systemErrorCode } from "./coded-error";
 import { describeExit, type Exit, exitOf, succeeded } from "./exit";
 
 type GitRun = { readonly exit: Exit; readonly out: string; readonly err: string };
@@ -38,12 +38,23 @@ function described(args: readonly string[]): string {
   return `git ${args.join(" ")}`;
 }
 
-function git(repo: string, args: readonly string[]): GitRun {
-  const run = spawnSync("git", ["-C", repo, ...args], {
+type Env = Readonly<Record<string, string>>;
+
+const TIMED_OUT = "ETIMEDOUT";
+
+function spawnGit(repo: string, args: readonly string[], env: Env, timeout: number | undefined) {
+  return spawnSync("git", ["-C", repo, ...args], {
     encoding: "utf8",
+    env: { ...process.env, ...env },
     stdio: ["ignore", "pipe", "pipe"],
     maxBuffer: Number.POSITIVE_INFINITY,
+    timeout,
+    killSignal: "SIGKILL",
   });
+}
+
+function git(repo: string, args: readonly string[], env: Env = {}): GitRun {
+  const run = spawnGit(repo, args, env, undefined);
   if (run.error) throw refuse("git_unavailable", { detail: run.error.message });
   return { exit: exitOf(run), out: run.stdout.trim(), err: run.stderr.trim() };
 }
@@ -114,21 +125,130 @@ export function removeWorktree(repo: string, path: string, force: boolean): void
 
 const LOCAL_REMOTE = ".";
 
-export function upstreamRemote(repo: string, branch: string): string | null {
-  const run = foundOrFault(repo, ["config", "--get", `branch.${branch}.remote`]);
-  if (run === null || run.out === LOCAL_REMOTE) return null;
-  return run.out;
+export type Upstream = { readonly remote: string; readonly ref: string };
+
+export function upstreamOf(repo: string, branch: string): Upstream | null {
+  const remote = foundOrFault(repo, ["config", "--get", `branch.${branch}.remote`]);
+  const ref = foundOrFault(repo, ["config", "--get", `branch.${branch}.merge`]);
+  if (remote === null || ref === null || remote.out === LOCAL_REMOTE) return null;
+  return { remote: remote.out, ref: ref.out };
 }
 
-const DEFAULT_BRANCH_CANDIDATES = ["HEAD", "main", "master"] as const;
+export function hasRemote(repo: string, remote: string): boolean {
+  return foundOrFault(repo, ["config", "--get", `remote.${remote}.url`]) !== null;
+}
 
-export function remoteDefaultBranch(repo: string, remote: string): string | null {
-  for (const candidate of DEFAULT_BRANCH_CANDIDATES) {
-    const ref = `refs/remotes/${remote}/${candidate}`;
-    const run = foundOrFault(repo, ["rev-parse", "--verify", "--quiet", "--symbolic-full-name", ref]);
-    if (run !== null) return run.out;
-  }
-  return null;
+const NO_PROMPT = { GIT_TERMINAL_PROMPT: "0" };
+
+function firstErrorLine(run: GitRun): string {
+  const [first = ""] = run.err.split("\n").filter((line) => line.trim() !== "");
+  return first.trim();
+}
+
+type Online<T> = {
+  readonly value: (run: GitRun) => T;
+  readonly reason?: (run: GitRun) => string;
+};
+
+function gitOnline<T>(
+  repo: string,
+  args: readonly string[],
+  timeoutMs: number,
+  { value, reason = firstErrorLine }: Online<T>,
+): Reached<T> {
+  const run = spawnGit(repo, args, NO_PROMPT, timeoutMs);
+  if (run.error !== undefined && systemErrorCode(run.error) === TIMED_OUT)
+    return { kind: "failed", detail: `timed out after ${timeoutMs / 1000}s` };
+  if (run.error) throw refuse("git_unavailable", { detail: run.error.message });
+  const done = { exit: exitOf(run), out: run.stdout.trim(), err: run.stderr.trim() };
+  if (!succeeded(done.exit)) return { kind: "failed", detail: reason(done) };
+  return { kind: "reached", value: value(done) };
+}
+
+export type RemoteRefs = { readonly defaultRef: string | null; readonly heads: ReadonlyMap<string, string> };
+
+export type Reached<T> =
+  | { readonly kind: "reached"; readonly value: T }
+  | { readonly kind: "failed"; readonly detail: string };
+
+const SYMREF_LINE = /^ref: (refs\/heads\/\S+)\tHEAD$/;
+
+const HEAD_LINE = /^([0-9a-f]+)\t(refs\/heads\/\S+)$/;
+
+function parseRemoteRefs(out: string): RemoteRefs {
+  const lines = out.split("\n");
+  const defaultRef =
+    lines.map((line) => line.match(SYMREF_LINE)?.[1]).find((ref) => ref !== undefined) ?? null;
+  const heads = new Map(
+    lines.flatMap((line) => {
+      const match = line.match(HEAD_LINE);
+      return match?.[1] === undefined || match[2] === undefined ? [] : [[match[2], match[1]] as const];
+    }),
+  );
+  return { defaultRef, heads };
+}
+
+export function remoteRefs(repo: string, remote: string, timeoutMs: number): Reached<RemoteRefs> {
+  return gitOnline(repo, ["ls-remote", "--symref", remote, "HEAD", "refs/heads/*"], timeoutMs, {
+    value: ({ out }) => parseRemoteRefs(out),
+  });
+}
+
+export function trackingRef(remote: string, ref: string): string {
+  return ref.replace(/^refs\/heads\//, `refs/remotes/${remote}/`);
+}
+
+export function fetchBranch(repo: string, remote: string, ref: string, timeoutMs: number): Reached<string> {
+  const tracking = trackingRef(remote, ref);
+  return gitOnline(repo, ["fetch", "--quiet", "--no-tags", remote, `+${ref}:${tracking}`], timeoutMs, {
+    value: () => tracking,
+  });
+}
+
+export type RemoteBranch = { readonly remote: string; readonly ref: string; readonly tip: string };
+
+const PUSH_REJECTED = "!";
+
+function pushStatus(ref: string): (run: GitRun) => string {
+  return (run) => {
+    const status = run.out
+      .split("\n")
+      .map((line) => line.split("\t"))
+      .find(([flag, refs]) => flag === PUSH_REJECTED && refs?.endsWith(`:${ref}`));
+    return status?.[2] ?? firstErrorLine(run);
+  };
+}
+
+export function deleteRemoteBranch(repo: string, branch: RemoteBranch, timeoutMs: number): Reached<null> {
+  const lease = `--force-with-lease=${branch.ref}:${branch.tip}`;
+  const args = ["push", "--porcelain", lease, branch.remote, "--delete", branch.ref];
+  return gitOnline(repo, args, timeoutMs, { value: () => null, reason: pushStatus(branch.ref) });
+}
+
+export function deleteRef(repo: string, ref: string): void {
+  gitOutput(repo, ["update-ref", "-d", ref]);
+}
+
+export function hasCommit(repo: string, sha: string): boolean {
+  return foundOrFault(repo, ["rev-parse", "--verify", "--quiet", `${sha}^{commit}`]) !== null;
+}
+
+const SQUASH_IDENTITY = {
+  GIT_AUTHOR_NAME: "agent-worktree",
+  GIT_AUTHOR_EMAIL: "agent-worktree@localhost",
+  GIT_COMMITTER_NAME: "agent-worktree",
+  GIT_COMMITTER_EMAIL: "agent-worktree@localhost",
+};
+
+const LANDED_PATCH = /^- [0-9a-f]+$/;
+
+export function isSquashLanded(repo: string, tip: string, into: string): boolean {
+  const base = foundOrFault(repo, ["merge-base", into, tip]);
+  if (base === null) return false;
+  const squash = git(repo, ["commit-tree", `${tip}^{tree}`, "-p", base.out, "-m", "squash"], SQUASH_IDENTITY);
+  if (!succeeded(squash.exit))
+    throw refuse("git_failed", { repo, command: "git commit-tree", exit: squash.exit, detail: squash.err });
+  return LANDED_PATCH.test(gitOutput(repo, ["cherry", into, squash.out, base.out]));
 }
 
 export function branchTip(repo: string, branch: string): string {

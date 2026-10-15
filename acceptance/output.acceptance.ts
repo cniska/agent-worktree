@@ -106,9 +106,7 @@ test("AC-28 the commands work with the network unavailable", () => {
   expect(succeeded(run(w, p.dir, ["create", "task-a"]))).toEqual([path]);
   expect(succeeded(run(w, path, ["init"]))).toEqual([]);
   expect(ls(w, p.dir)).toEqual([{ name: "task-a", state: "ready", branch: "task-a", path }]);
-  expect(succeeded(run(w, p.dir, ["remove", "task-a"]))).toEqual([
-    "branch task-a kept, no default branch tracked for origin",
-  ]);
+  expect(succeeded(run(w, p.dir, ["remove", "task-a"]))).toEqual(["branch task-a kept, no remote origin"]);
   expect(succeeded(run(w, p.dir, ["prune"]))).toEqual([]);
   const stdin = hookEvent({ hook_event_name: "WorktreeCreate", name: "task-b" });
   expect(succeeded(run(w, p.dir, ["hook"], { stdin }))).toEqual([p.path("task-b")]);

@@ -1,11 +1,12 @@
 import { readFileSync } from "node:fs";
 import { unreachable } from "./assert";
+import { fateText } from "./branches";
 import { type Command, usageRefusal } from "./cli-contract";
 import { parseHookEvent } from "./hook";
 import { note } from "./log";
 import { blockText } from "./ports";
 import { checkout, type Project, parseName, project, type WorktreeName, worktreePath } from "./project";
-import { create, fateText, init, type Listed, list, prune, remove } from "./worktrees";
+import { create, init, type Listed, list, prune, remove } from "./worktrees";
 
 function noPositionals(positionals: readonly string[], command: Command): void {
   if (positionals.length > 0)
