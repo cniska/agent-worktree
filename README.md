@@ -95,18 +95,17 @@ The plugin brings neither Bun nor the CLI. Install the CLI first: with the plugi
 ```bash
 mise trust && mise install
 bin/agent-worktree create <name>
-agent-gates doctor
 ```
 
 - `mise install` sets up the clone as [Install](#install) says, and the `bun install` its postinstall runs calls the `prepare` script, which points `core.hooksPath` at `.githooks/`.
 - `bin/agent-worktree create <name>` makes a task worktree and runs `scripts/worktree-setup.sh` in it, which installs the same way without linking the CLI.
-- `.githooks/` holds the commit-subject, format and no-comments gates that [agent-gates](https://github.com/cniska/agent-gates) installs, and `agent-gates doctor` reports their health.
+- `.githooks/` holds the commit-subject, format and no-comments gates.
 
 ### Checks
 
 - `bun run check` runs the lint, the typecheck, knip (an export, file or dependency nothing uses) and the tests, and `.githooks/pre-commit.d/check` runs it before each commit.
 - `bun run acceptance` proves the criteria in [`SPEC.md`](SPEC.md) through the CLI alone, as [`AGENTS.md`](AGENTS.md) describes.
-- `bun run format` formats `src/` and `acceptance/` with Biome, and the format gate runs it with the linter off before each commit and stages what it changes in the staged files.
+- `bun run format` formats `src/`, `acceptance/` and `scripts/` with Biome, and the format gate runs it with the linter off before each commit and stages what it changes in the staged files.
 - `.github/workflows/check.yml` runs the check and the acceptance suite on each push and pull request, and `commits.yml`, `format.yml` and `no-comments.yml` run the gates.
 
 ### Layout
