@@ -16,7 +16,7 @@ Two agents in one checkout overwrite each other's files, so parallel work needs 
 
 ### 2.1 Where worktrees live
 
-- **FR-1** — A task worktree is created at `<data>/<key>/<name>`, where `<data>` is `$XDG_DATA_HOME/agent-worktree`.
+- **FR-1** — A task worktree is created at `<data>/<key>/<name>`, where `<data>` is `$XDG_DATA_HOME/agent-worktree` with each symlink in its existing part resolved, so the path is the one git lists for the worktree.
 - **FR-2** — An `XDG_DATA_HOME` that is unset, empty or not an absolute path counts as `$HOME/.local/share`.
 - **FR-3** — A `HOME` that is unset, empty or only whitespace counts as the account's home directory.
 - **FR-4** — A project's key is its primary checkout's directory name, a dash, and a short hash of the primary's absolute path; it is the same from the primary and from each of its worktrees.
@@ -196,6 +196,7 @@ Two agents in one checkout overwrite each other's files, so parallel work needs 
 - **AC-48** — Compile the release binary and run it with only its own directory and git on `PATH`: `--version` prints the version, `create task-a` in a fresh repository prints the worktree's path, and `remove task-a` removes it. (FR-67)
 - **AC-49** — Run `install.sh` in a fresh home against a stand-in for the release downloads, twice, then once with a wrong checksum in another fresh home, then against builds that report an empty version, `1.2.3.4` and `../x`: the installed `agent-worktree --version` prints the release's version and `~/.local/bin` holds only it, and the bad download and each mislabelled build are refused with nothing written. (FR-68)
 - **AC-50** — Build the npm packages from a release build, install the shim into a prefix and run it through Node, first with its manifest naming only another platform's package, then without its platform package, then with it unexecutable, then whole: the first three are refused, each naming its cause and exiting 1; then `--version` prints the package version, `--version now` exits 2 with the build's usage refusal, and `create task-a` prints the worktree's path. (FR-69)
+- **AC-51** — With `XDG_DATA_HOME` a symlink to a scratch directory, `create task-a` prints the worktree under the directory the symlink points to, and `remove task-a` removes it. (FR-1)
 
 ## 6. Deliverables
 

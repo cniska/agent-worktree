@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { userInfo } from "node:os";
 import { dirname, join } from "node:path";
 import { git, keyOf, ls, project, removeScratch, repo, run, succeeded, world } from "./harness";
@@ -31,6 +31,19 @@ test("AC-2 an unset, empty or relative XDG_DATA_HOME falls back to HOME, and an 
   const account = userInfo().homedir;
   expect(pathWith({}, ["XDG_DATA_HOME", "HOME"])).toStartWith(underHome(account));
   expect(pathWith({ HOME: "" }, ["XDG_DATA_HOME"])).toStartWith(underHome(account));
+});
+
+test("AC-51 an XDG_DATA_HOME reached through a symlink places the worktree at the resolved path, and remove removes it", () => {
+  const w = world();
+  const p = project(w);
+  const linked = join(w.root, "linked-data");
+  symlinkSync(join(w.root, "data"), linked);
+  const env = { XDG_DATA_HOME: linked };
+  const [created = ""] = succeeded(run(w, p.dir, ["create", "task-a"], { env }));
+  expect(created).toStartWith(`${w.data}/repo-`);
+  expect(created).toEndWith("/task-a");
+  succeeded(run(w, p.dir, ["remove", "task-a"], { env }));
+  expect(existsSync(created)).toBe(false);
 });
 
 test("AC-3 the key is the same from the primary and its worktree, and differs for two clones named alike", () => {

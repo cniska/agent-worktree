@@ -3,7 +3,7 @@ import { basename, dirname, join } from "node:path";
 import { invariant } from "./assert";
 import { refuser } from "./coded-error";
 import { revParse, validBranchName } from "./git";
-import { dataDir } from "./paths";
+import { dataDir, resolvedPath } from "./paths";
 
 export type Project = { readonly primary: string; readonly commonDir: string };
 
@@ -83,7 +83,7 @@ function projectKey(project: Project): string {
 }
 
 export function worktreesDir(project: Project): string {
-  return join(dataDir(), projectKey(project));
+  return join(resolvedPath(dataDir()), projectKey(project));
 }
 
 export function worktreePath(project: Project, segment: string): string {

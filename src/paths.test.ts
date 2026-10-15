@@ -1,8 +1,11 @@
-import { describe, expect, test } from "bun:test";
-import { realpathSync } from "node:fs";
+import { afterAll, describe, expect, test } from "bun:test";
+import { mkdirSync, realpathSync, symlinkSync } from "node:fs";
 import { homedir, tmpdir, userInfo } from "node:os";
 import { join } from "node:path";
-import { dataDir } from "./paths";
+import { dataDir, resolvedPath } from "./paths";
+import { removeScratchDirs, scratchDir } from "./repo.test-support";
+
+afterAll(removeScratchDirs);
 
 describe("dataDir", () => {
   test("lives under an absolute XDG_DATA_HOME", () => {
@@ -31,5 +34,18 @@ describe("dataDir", () => {
       expect(process.env[variable]).toStartWith(realpathSync(tmpdir()));
     }
     expect(dataDir()).toBe(join(process.env.XDG_DATA_HOME ?? "", "agent-worktree"));
+  });
+});
+
+describe("resolvedPath", () => {
+  test("resolves each symlink in the part that exists and keeps the rest as written", () => {
+    const root = scratchDir();
+    mkdirSync(join(root, "real"));
+    symlinkSync(join(root, "real"), join(root, "link"));
+    expect(resolvedPath(join(root, "link"))).toBe(join(root, "real"));
+    expect(resolvedPath(join(root, "link", "made-up", "task-a"))).toBe(
+      join(root, "real", "made-up", "task-a"),
+    );
+    expect(resolvedPath(join(root, "absent", "task-a"))).toBe(join(root, "absent", "task-a"));
   });
 });
