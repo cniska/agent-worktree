@@ -187,6 +187,12 @@ test(
       stdout: `${version}\n`,
       stderr: "",
     });
+    expect(runOnPath(w, p.dir, path, ["--version", "now"])).toEqual({
+      exitCode: 2,
+      stdout: "",
+      stderr:
+        "agent-worktree: agent-worktree --version takes no argument, and got: now\n  agent-worktree --version\n",
+    });
     expect(succeeded(runOnPath(w, p.dir, path, ["create", "task-a"]))).toEqual([p.path("task-a")]);
   },
   BUILD_TIMEOUT_MS,
