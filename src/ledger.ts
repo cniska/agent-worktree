@@ -215,11 +215,13 @@ export async function claimBlock(
   name: WorktreeName,
   wanted: PortRequest,
   reclaim: Reclaim,
+  sweep: () => boolean,
 ): Promise<Block> {
   const held = blockOf(project, name);
   if (held !== null && isRunOf(held, wanted.unitCount)) return held;
   const holder = entryDir(project, name);
-  const block = await claimLowest(project, holder, wanted.unitCount, reclaim);
+  const lowest = () => claimLowest(project, holder, wanted.unitCount, reclaim);
+  const block = (await lowest()) ?? (sweep() ? await lowest() : null);
   const outside = unitsHeldBy(claims(), holder).filter((unit) => block === null || !block.includes(unit));
   dropClaims(outside, holder);
   if (block === null) throw refuse("no_free_ports", { name, ports: wanted.ports });

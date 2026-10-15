@@ -66,9 +66,16 @@ function gitOutput(repo: string, args: readonly string[]): string {
   return run.out;
 }
 
-function gitOrRefusal(repo: string, args: readonly string[]): void {
+export type GitRefusal = ReturnType<typeof refuse<"git_refused">>;
+
+function gitRefusal(repo: string, args: readonly string[]): GitRefusal | null {
   const run = git(repo, args);
-  if (!succeeded(run.exit)) throw refuse("git_refused", { command: described(args), detail: run.err });
+  return succeeded(run.exit) ? null : refuse("git_refused", { command: described(args), detail: run.err });
+}
+
+function gitOrRefusal(repo: string, args: readonly string[]): void {
+  const refusal = gitRefusal(repo, args);
+  if (refusal !== null) throw refusal;
 }
 
 type Answers<F extends readonly string[]> = { readonly [K in keyof F]: string };
@@ -119,8 +126,8 @@ export function addWorktree(repo: string, path: string, branch: string): void {
   gitOrRefusal(repo, ["worktree", "add", path, ...target]);
 }
 
-export function removeWorktree(repo: string, path: string, force: boolean): void {
-  gitOrRefusal(repo, ["worktree", "remove", ...(force ? ["--force"] : []), path]);
+export function worktreeRemoval(repo: string, path: string, force: boolean): GitRefusal | null {
+  return gitRefusal(repo, ["worktree", "remove", ...(force ? ["--force"] : []), path]);
 }
 
 const LOCAL_REMOTE = ".";

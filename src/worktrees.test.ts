@@ -41,7 +41,7 @@ describe("create", () => {
     const f = fixture({ ports: 10 });
     const firstFree = await firstFreeUnit();
     const path = f.path("task-a");
-    expect(await create(f.project, f.name("task-a"))).toBe(path);
+    expect(await create(f.project, f.name("task-a"), f.dir)).toBe(path);
     expect(recorded(f.setupRecord)).toEqual(["task-a", path, f.dir, path]);
     expect(git(f.dir, ["branch", "--show-current"])).toBe("main");
     expect(git(path, ["branch", "--show-current"])).toBe("task-a");
@@ -60,9 +60,9 @@ describe("create", () => {
 
   test("a rerun returns the path without running setup again", async () => {
     const f = fixture();
-    const path = await create(f.project, f.name("task-a"));
+    const path = await create(f.project, f.name("task-a"), f.dir);
     rmSync(f.setupRecord);
-    expect(await create(f.project, f.name("task-a"))).toBe(path);
+    expect(await create(f.project, f.name("task-a"), f.dir)).toBe(path);
     expect(existsSync(f.setupRecord)).toBe(false);
   });
 
@@ -70,23 +70,23 @@ describe("create", () => {
     const f = fixture();
     git(f.dir, ["branch", "task-b"]);
     git(f.dir, ["commit", "-q", "--allow-empty", "-m", "ahead"]);
-    await create(f.project, f.name("task-b"));
+    await create(f.project, f.name("task-b"), f.dir);
     expect(git(f.path("task-b"), ["rev-parse", "HEAD"])).toBe(git(f.dir, ["rev-parse", "task-b"]));
   });
 
   test("a failed setup keeps the worktree pending, and a rerun resumes it", async () => {
     const f = fixture({ setup: "exit 7" });
     const name = f.name("task-a");
-    const failed = await rejection(() => create(f.project, name));
+    const failed = await rejection(() => create(f.project, name, f.dir));
     expect(failed.code).toBe("setup_failed");
     expect(failed.message).toBe(
       `scripts/worktree-setup.sh exited 7 in ${f.path("task-a")}; setup is pending`,
     );
     expect(failed.resolve).toBe("fix what the script reported, then run the command again to resume");
     expect(stateKind(f, "task-a")).toBe("pending");
-    expect((await rejection(() => create(f.project, name))).code).toBe("setup_failed");
+    expect((await rejection(() => create(f.project, name, f.dir))).code).toBe("setup_failed");
     script(f.path("task-a"), "worktree-setup.sh", recording(SETUP_RECORD));
-    expect(await create(f.project, name)).toBe(f.path("task-a"));
+    expect(await create(f.project, name, f.dir)).toBe(f.path("task-a"));
     expect(stateKind(f, "task-a")).toBe("ready");
   });
 
@@ -94,7 +94,7 @@ describe("create", () => {
     const f = fixture({
       setup: "printf retained > setup-result; git add setup-result; git commit -qm x; exit 7",
     });
-    expect((await rejection(() => create(f.project, f.name("task-a")))).code).toBe("setup_failed");
+    expect((await rejection(() => create(f.project, f.name("task-a"), f.dir))).code).toBe("setup_failed");
     expect(git(f.dir, ["show", "task-a:setup-result"])).toBe("retained");
   });
 
@@ -105,7 +105,7 @@ describe("create", () => {
     writeFileSync(setup, "#!/nonexistent/interpreter\nexit 0\n");
     chmodSync(setup, 0o755);
     git(f.dir, ["commit", "-qam", "setup with a missing interpreter"]);
-    const refused = await rejection(() => create(f.project, f.name("task-a")));
+    const refused = await rejection(() => create(f.project, f.name("task-a"), f.dir));
     expect(refused.code).toBe("script_unrunnable");
     expect(refused.resolve).toBe("fix the script's interpreter line, then run the command again");
     expect(stateKind(f, "task-a")).toBe("pending");
@@ -115,7 +115,7 @@ describe("create", () => {
     const f = fixture();
     rmSync(join(f.dir, "scripts"), { recursive: true });
     git(f.dir, ["commit", "-qam", "no scripts"]);
-    expect(await create(f.project, f.name("task-a"))).toBe(f.path("task-a"));
+    expect(await create(f.project, f.name("task-a"), f.dir)).toBe(f.path("task-a"));
     expect(stateKind(f, "task-a")).toBe("ready");
   });
 
@@ -126,14 +126,14 @@ describe("create", () => {
     rmSync(join(f.dir, "scripts", "worktree-setup.sh"));
     writeFileSync(join(f.dir, "scripts", "worktree-setup.sh"), "#!/bin/sh\nexit 0\n");
     git(f.dir, ["commit", "-qam", "setup not executable"]);
-    const refused = await rejection(() => create(f.project, name));
+    const refused = await rejection(() => create(f.project, name, f.dir));
     expect(refused.code).toBe("script_not_executable");
     expect(refused.resolve).toBe(
       `chmod +x ${setup}, or delete it when it is not needed, then run the command again`,
     );
     expect(stateKind(f, "task-a")).toBe("pending");
     chmodSync(setup, 0o755);
-    expect(await create(f.project, name)).toBe(f.path("task-a"));
+    expect(await create(f.project, name, f.dir)).toBe(f.path("task-a"));
   });
 
   test("a file where the worktree goes is refused as unmanaged and listed, while a non-name file is hidden", async () => {
@@ -142,7 +142,7 @@ describe("create", () => {
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(path, "not a dir");
     writeFileSync(join(dirname(path), ".DS_Store"), "");
-    expect((await rejection(() => create(f.project, f.name("task-e")))).code).toBe("unmanaged");
+    expect((await rejection(() => create(f.project, f.name("task-e"), f.dir))).code).toBe("unmanaged");
     expect(list(f.project)).toEqual([{ path, state: { kind: "unmanaged", name: "task-e", worktree: null } }]);
   });
 
@@ -150,17 +150,17 @@ describe("create", () => {
     const f = fixture({ ports: 10 });
     const firstFree = await firstFreeUnit();
     const name = f.name("task-a");
-    const path = await create(f.project, name);
+    const path = await create(f.project, name, f.dir);
     git(f.dir, ["worktree", "remove", "--force", path]);
     writeFileSync(path, "not a dir");
     expect(list(f.project)).toEqual([{ path, state: { kind: "unlisted", name, block: blockAt(firstFree) } }]);
-    expect((await rejection(() => create(f.project, name))).code).toBe("not_a_worktree");
+    expect((await rejection(() => create(f.project, name, f.dir))).code).toBe("not_a_worktree");
   });
 
   test("a directory the tool did not create is refused, not reused", async () => {
     const f = fixture();
     mkdirSync(f.path("task-plain"), { recursive: true });
-    const refused = await rejection(() => create(f.project, f.name("task-plain")));
+    const refused = await rejection(() => create(f.project, f.name("task-plain"), f.dir));
     expect(refused.code).toBe("unmanaged");
     expect(refused.resolve).toBe(
       `remove it yourself, with git worktree remove ${f.path("task-plain")} when git lists it, or pick another name`,
@@ -169,7 +169,7 @@ describe("create", () => {
 
   test("a branch checked out elsewhere is git's refusal, and registers nothing", async () => {
     const f = fixture();
-    const refused = await rejection(() => create(f.project, f.name("main")));
+    const refused = await rejection(() => create(f.project, f.name("main"), f.dir));
     expect(refused.code).toBe("git_refused");
     expect(refused.message).toStartWith("git worktree add");
     expect(list(f.project)).toEqual([]);
@@ -179,7 +179,7 @@ describe("create", () => {
     const f = fixture({ ports: 10 });
     const firstFree = await firstFreeUnit();
     const name = f.name("task-a");
-    const path = await create(f.project, name);
+    const path = await create(f.project, name, f.dir);
     rmSync(path, { recursive: true });
     expect(list(f.project)).toEqual([
       {
@@ -192,7 +192,7 @@ describe("create", () => {
         },
       },
     ]);
-    expect((await rejection(() => create(f.project, name))).code).toBe("orphaned");
+    expect((await rejection(() => create(f.project, name, f.dir))).code).toBe("orphaned");
     expect(refusal(() => remove(f.project, name, true)).code).toBe("orphaned");
   });
 
@@ -200,11 +200,11 @@ describe("create", () => {
     const f = fixture({ ports: 10 });
     const firstFree = await firstFreeUnit();
     const name = f.name("task-a");
-    const path = await create(f.project, name);
+    const path = await create(f.project, name, f.dir);
     git(f.dir, ["worktree", "remove", "--force", path]);
     mkdirSync(path);
     rmSync(f.setupRecord);
-    const refused = await rejection(() => create(f.project, name));
+    const refused = await rejection(() => create(f.project, name, f.dir));
     expect(refused.code).toBe("not_a_worktree");
     expect(refused.resolve).toBe("remove the directory, then agent-worktree prune");
     expect(existsSync(f.setupRecord)).toBe(false);
@@ -215,8 +215,8 @@ describe("create", () => {
   test("a name differing only in case from an existing one is refused before anything is written", async () => {
     const f = fixture({ ports: 10 });
     const firstFree = await firstFreeUnit();
-    const path = await create(f.project, f.name("task-a"));
-    const collided = await rejection(() => create(f.project, f.name("Task-A")));
+    const path = await create(f.project, f.name("task-a"), f.dir);
+    const collided = await rejection(() => create(f.project, f.name("Task-A"), f.dir));
     expect(collided.code).toBe("case_collision");
     expect(collided.message).toBe("Task-A differs only in case from the existing task-a");
     expect(collided.resolve).toBe("use the name task-a, or pick a name that differs in more than case");
@@ -241,7 +241,7 @@ describe("remove", () => {
     "removes a worktree beside a stray directory that differs only in case",
     async () => {
       const f = fixture({ ports: 10 });
-      const path = await create(f.project, f.name("task-a"));
+      const path = await create(f.project, f.name("task-a"), f.dir);
       const stray = f.path("Task-A");
       mkdirSync(stray);
       expect(refusal(() => remove(f.project, f.name("Task-A"), true)).code).toBe("unmanaged");
@@ -269,7 +269,7 @@ describe("remove", () => {
 
   test("removes the worktree and keeps the branch when there is no remote", async () => {
     const f = fixture();
-    const path = await create(f.project, f.name("task-a"));
+    const path = await create(f.project, f.name("task-a"), f.dir);
     expect(remove(f.project, f.name("task-a"), false)).toEqual({
       kind: "no_remote",
       branch: "task-a",
@@ -282,14 +282,14 @@ describe("remove", () => {
 
   test("returns detached for a detached worktree", async () => {
     const f = fixture();
-    const path = await create(f.project, f.name("task-a"));
+    const path = await create(f.project, f.name("task-a"), f.dir);
     git(path, ["checkout", "-q", "--detach"]);
     expect(remove(f.project, f.name("task-a"), false)).toEqual({ kind: "detached" });
   });
 
   test("runs the primary's teardown in the primary, with the name, before removal", async () => {
     const f = fixture();
-    const path = await create(f.project, f.name("task-f"));
+    const path = await create(f.project, f.name("task-f"), f.dir);
     script(
       f.dir,
       "worktree-teardown.sh",
@@ -303,7 +303,7 @@ describe("remove", () => {
   test("keeps the entry when git refuses the removal after a clean teardown, and forces nothing", async () => {
     const f = fixture({ teardown: 'touch "$WORKTREE_PATH/left"' });
     const name = f.name("task-a");
-    const path = await create(f.project, name);
+    const path = await create(f.project, name, f.dir);
     const refused = refusal(() => remove(f.project, name, false));
     expect(refused.code).toBe("git_refused");
     expect(refused.message).toStartWith(`git worktree remove ${path} refused:`);
@@ -314,7 +314,7 @@ describe("remove", () => {
   test("refuses a dirty worktree before teardown runs, and --force drops the changes", async () => {
     const f = fixture({ teardown: TOUCH_TEARDOWN_RECORD });
     const name = f.name("task-a");
-    const path = await create(f.project, name);
+    const path = await create(f.project, name, f.dir);
     writeFileSync(join(path, "scratch"), "untracked");
     const refused = refusal(() => remove(f.project, name, false));
     expect(refused.code).toBe("dirty");
@@ -331,7 +331,7 @@ describe("remove", () => {
   test("refuses a locked worktree before teardown runs, even by force", async () => {
     const f = fixture({ teardown: TOUCH_TEARDOWN_RECORD });
     const name = f.name("task-a");
-    const path = await create(f.project, name);
+    const path = await create(f.project, name, f.dir);
     git(f.dir, ["worktree", "lock", path]);
     const refused = refusal(() => remove(f.project, name, true));
     expect(refused.code).toBe("locked");
@@ -347,7 +347,7 @@ describe("remove", () => {
   test("refuses a worktree with submodules before teardown runs, and --force removes it", async () => {
     const f = fixture({ teardown: TOUCH_TEARDOWN_RECORD });
     const name = f.name("task-a");
-    const path = await create(f.project, name);
+    const path = await create(f.project, name, f.dir);
     git(path, [
       "update-index",
       "--add",
@@ -366,7 +366,7 @@ describe("remove", () => {
     const f = fixture({ ports: 10, teardown: "exit 3" });
     const firstFree = await firstFreeUnit();
     const name = f.name("task-c");
-    const path = await create(f.project, name);
+    const path = await create(f.project, name, f.dir);
     const refused = refusal(() => remove(f.project, name, false));
     expect(refused.code).toBe("teardown_failed");
     expect(refused.message).toBe("scripts/worktree-teardown.sh exited 3 for task-c; the worktree is kept");
@@ -381,7 +381,7 @@ describe("remove", () => {
   test("a signal-killed teardown keeps the worktree", async () => {
     const f = fixture({ teardown: "kill -9 $$" });
     const name = f.name("task-d");
-    const path = await create(f.project, name);
+    const path = await create(f.project, name, f.dir);
     const refused = refusal(() => remove(f.project, name, false));
     expect(refused.code).toBe("teardown_failed");
     expect(refused.message).toBe(
@@ -393,7 +393,7 @@ describe("remove", () => {
   test("a teardown script that is not executable is refused, and the worktree is kept", async () => {
     const f = fixture();
     const name = f.name("task-a");
-    const path = await create(f.project, name);
+    const path = await create(f.project, name, f.dir);
     const teardown = join(f.dir, "scripts", "worktree-teardown.sh");
     writeFileSync(teardown, "#!/bin/sh\nexit 0\n");
     const refused = refusal(() => remove(f.project, name, true));
@@ -407,7 +407,7 @@ describe("remove", () => {
   test("a teardown script that is a dangling symlink is refused, not skipped", async () => {
     const f = fixture();
     const name = f.name("task-a");
-    const path = await create(f.project, name);
+    const path = await create(f.project, name, f.dir);
     symlinkSync(join(f.dir, "nowhere"), join(f.dir, "scripts", "worktree-teardown.sh"));
     expect(refusal(() => remove(f.project, name, true)).code).toBe("script_not_executable");
     expect(existsSync(path)).toBe(true);
@@ -416,7 +416,7 @@ describe("remove", () => {
 
   test("removes without a teardown script, ignoring one the worktree carries", async () => {
     const f = fixture();
-    const path = await create(f.project, f.name("task-g"));
+    const path = await create(f.project, f.name("task-g"), f.dir);
     script(path, "worktree-teardown.sh", TOUCH_TEARDOWN_RECORD);
     remove(f.project, f.name("task-g"), false);
     expect(existsSync(f.teardownRecord)).toBe(false);
@@ -446,7 +446,7 @@ describe("the branch of a removed worktree", () => {
   test("is deleted here and on the remote once it landed", async () => {
     const f = fixture();
     const bare = withRemote(f.dir, "origin");
-    const path = await create(f.project, f.name("task-a"));
+    const path = await create(f.project, f.name("task-a"), f.dir);
     commitIn(path, "work");
     git(path, ["push", "-q", "-u", "origin", "task-a"]);
     git(path, ["push", "-q", "origin", "task-a:main"]);
@@ -464,7 +464,7 @@ describe("the branch of a removed worktree", () => {
   test("is kept when it has not landed, even by force", async () => {
     const f = fixture();
     withRemote(f.dir, "origin");
-    const path = await create(f.project, f.name("task-a"));
+    const path = await create(f.project, f.name("task-a"), f.dir);
     commitIn(path, "work");
     writeFileSync(join(path, "scratch"), "untracked");
     expect(remove(f.project, f.name("task-a"), true)).toEqual({
@@ -478,12 +478,12 @@ describe("the branch of a removed worktree", () => {
   test("is settled by prune for a worktree deleted by hand", async () => {
     const f = fixture();
     withRemote(f.dir, "origin");
-    const merged = await create(f.project, f.name("task-a"));
-    const unmerged = await create(f.project, f.name("task-b"));
+    const merged = await create(f.project, f.name("task-a"), f.dir);
+    const unmerged = await create(f.project, f.name("task-b"), f.dir);
     commitIn(unmerged, "work");
     rmSync(merged, { recursive: true });
     rmSync(unmerged, { recursive: true });
-    prune(f.project);
+    prune(f.project, f.dir);
     expect(branches(f)).toBe("task-b");
     expect(list(f.project)).toEqual([]);
   });
@@ -492,28 +492,28 @@ describe("the branch of a removed worktree", () => {
 describe("prune", () => {
   test("does nothing in a repo with nothing to prune", () => {
     const f = fixture();
-    prune(f.project);
+    prune(f.project, f.dir);
     expect(list(f.project)).toEqual([]);
   });
 
   test("tears down a worktree deleted by hand, after which the name can be created again", async () => {
     const f = fixture({ teardown: recording(TEARDOWN_RECORD) });
     const name = f.name("task-a");
-    const path = await create(f.project, name);
+    const path = await create(f.project, name, f.dir);
     rmSync(path, { recursive: true });
-    prune(f.project);
+    prune(f.project, f.dir);
     expect(recorded(f.teardownRecord)).toEqual(["task-a", path, f.dir, f.dir]);
     expect(list(f.project)).toEqual([]);
     expect(git(f.dir, ["worktree", "list", "--porcelain"])).not.toContain(path);
-    expect(await create(f.project, name)).toBe(path);
+    expect(await create(f.project, name, f.dir)).toBe(path);
   });
 
   test("tears down only the orphan, leaving a ready worktree beside it ready", async () => {
     const f = fixture({ teardown: recording(TEARDOWN_RECORD) });
-    await create(f.project, f.name("task-a"));
-    const orphan = await create(f.project, f.name("task-b"));
+    await create(f.project, f.name("task-a"), f.dir);
+    const orphan = await create(f.project, f.name("task-b"), f.dir);
     rmSync(orphan, { recursive: true });
-    prune(f.project);
+    prune(f.project, f.dir);
     expect(recorded(f.teardownRecord)).toEqual(["task-b", orphan, f.dir, f.dir]);
     expect(list(f.project).map((item) => [item.state.name, item.state.kind])).toEqual([["task-a", "ready"]]);
   });
@@ -521,27 +521,108 @@ describe("prune", () => {
   test("keeps every entry whose teardown fails, refuses with their names, and converges once it passes", async () => {
     const f = fixture({ teardown: "exit 3" });
     for (const name of ["task-c", "task-d"]) {
-      await create(f.project, f.name(name));
+      await create(f.project, f.name(name), f.dir);
       remove(f.project, f.name(name), true);
     }
-    const refused = refusal(() => prune(f.project));
-    expect(refused.code).toBe("teardowns_failed");
+    const refused = refusal(() => prune(f.project, f.dir));
+    expect(refused.code).toBe("removals_failed");
     expect(refused.message).toBe(
-      "scripts/worktree-teardown.sh failed for task-c, task-d, which stay registered",
+      "could not remove task-c (scripts/worktree-teardown.sh exited 3), task-d (scripts/worktree-teardown.sh exited 3), which stay registered",
     );
-    expect(refused.resolve).toBe("fix what the script reported, then run agent-worktree prune again");
+    expect(refused.resolve).toBe("fix what each cause names, then run agent-worktree prune again");
     expect(stateKind(f, "task-c")).toBe("orphaned");
     expect(stateKind(f, "task-d")).toBe("orphaned");
     script(f.dir, "worktree-teardown.sh", "exit 0");
-    prune(f.project);
+    prune(f.project, f.dir);
     expect(list(f.project)).toEqual([]);
+  });
+});
+
+function land(path: string, branch: string): void {
+  commitIn(path, `${branch}-work`);
+  git(path, ["pull", "-q", "--no-rebase", "--no-edit", "origin", "main"]);
+  git(path, ["push", "-q", "-u", "origin", branch]);
+  git(path, ["push", "-q", "origin", `${branch}:main`]);
+}
+
+describe("prune of a worktree whose branch landed", () => {
+  test("tears it down, removes it, and deletes its branch here and on the remote", async () => {
+    const f = fixture({ teardown: recording(TEARDOWN_RECORD) });
+    const bare = withRemote(f.dir, "origin");
+    const path = await create(f.project, f.name("task-a"), f.dir);
+    land(path, "task-a");
+    prune(f.project, f.dir);
+    expect(recorded(f.teardownRecord)).toEqual(["task-a", path, f.dir, f.dir]);
+    expect(list(f.project)).toEqual([]);
+    expect(existsSync(path)).toBe(false);
+    expect(branches(f)).toBe("");
+    expect(git(bare, ["for-each-ref", "--format=%(refname)", "refs/heads"])).toBe("refs/heads/main");
+  });
+
+  test("keeps one never pushed, one dirty, one unmerged, one locked and the one prune runs in", async () => {
+    const f = fixture({ teardown: TOUCH_TEARDOWN_RECORD });
+    withRemote(f.dir, "origin");
+    const fresh = await create(f.project, f.name("task-a"), f.dir);
+    const dirty = await create(f.project, f.name("task-b"), f.dir);
+    land(dirty, "task-b");
+    writeFileSync(join(dirty, "scratch"), "untracked");
+    const unmerged = await create(f.project, f.name("task-c"), f.dir);
+    commitIn(unmerged, "work");
+    git(unmerged, ["push", "-q", "-u", "origin", "task-c"]);
+    const locked = await create(f.project, f.name("task-d"), f.dir);
+    land(locked, "task-d");
+    git(f.dir, ["worktree", "lock", locked]);
+    const here = await create(f.project, f.name("task-e"), f.dir);
+    land(here, "task-e");
+    prune(f.project, here);
+    expect(existsSync(f.teardownRecord)).toBe(false);
+    expect(list(f.project).map((item) => [item.state.name, item.state.kind])).toEqual([
+      ["task-a", "ready"],
+      ["task-b", "ready"],
+      ["task-c", "ready"],
+      ["task-d", "ready"],
+      ["task-e", "ready"],
+    ]);
+    expect([fresh, dirty, unmerged, locked, here].every((path) => existsSync(path))).toBe(true);
+  });
+
+  test("keeps one git refuses to remove after its teardown, refusing with why, and removes the next", async () => {
+    const f = fixture({ teardown: '[ "$WORKTREE_NAME" = task-a ] && touch "$WORKTREE_PATH/left"; exit 0' });
+    withRemote(f.dir, "origin");
+    const refusedPath = await create(f.project, f.name("task-a"), f.dir);
+    land(refusedPath, "task-a");
+    const removedPath = await create(f.project, f.name("task-b"), f.dir);
+    land(removedPath, "task-b");
+    const refused = refusal(() => prune(f.project, f.dir));
+    expect(refused.code).toBe("removals_failed");
+    expect(refused.message).toStartWith(
+      `could not remove task-a (git worktree remove ${refusedPath} refused: `,
+    );
+    expect(stateKind(f, "task-a")).toBe("ready");
+    expect(existsSync(join(refusedPath, "left"))).toBe(true);
+    expect(existsSync(removedPath)).toBe(false);
+    expect(branches(f)).toBe("task-a");
+  });
+
+  test("keeps one whose teardown fails, refusing with its name", async () => {
+    const f = fixture({ teardown: "exit 3" });
+    withRemote(f.dir, "origin");
+    const path = await create(f.project, f.name("task-a"), f.dir);
+    land(path, "task-a");
+    const refused = refusal(() => prune(f.project, f.dir));
+    expect(refused.code).toBe("removals_failed");
+    expect(refused.message).toBe(
+      "could not remove task-a (scripts/worktree-teardown.sh exited 3), which stay registered",
+    );
+    expect(stateKind(f, "task-a")).toBe("ready");
+    expect(branches(f)).toBe("task-a");
   });
 });
 
 describe("list", () => {
   test("sorts registered and unmanaged directories together by name", async () => {
     const f = fixture();
-    await create(f.project, f.name("task-z"));
+    await create(f.project, f.name("task-z"), f.dir);
     mkdirSync(f.path("task-b"));
     mkdirSync(join(dirname(f.path("task-b")), "user+feature"));
     expect(list(f.project).map((item) => [item.state.name, item.state.kind])).toEqual([
@@ -572,7 +653,7 @@ describe("init", () => {
     const f = fixture({ setup: "exit 7" });
     const name = f.name("task-a");
     const path = f.path("task-a");
-    expect((await rejection(() => create(f.project, name))).code).toBe("setup_failed");
+    expect((await rejection(() => create(f.project, name, f.dir))).code).toBe("setup_failed");
     script(path, "worktree-setup.sh", recording(SETUP_RECORD));
     await init(f.project, path);
     expect(recorded(f.setupRecord)).toEqual(["task-a", path, f.dir, path]);
@@ -627,7 +708,7 @@ describe("a worktree in the earlier location", () => {
   test("refuses create, init and remove, naming how to keep it and how to drop it", async () => {
     const f = fixture();
     const old = legacy(f, "task-a");
-    const refused = await rejection(() => create(f.project, f.name("task-a")));
+    const refused = await rejection(() => create(f.project, f.name("task-a"), f.dir));
     expect(refused.code).toBe("legacy_location");
     expect(refused.message).toBe(
       `task-a is at ${old}, inside the primary checkout, where agent-worktree no longer keeps worktrees`,
@@ -644,7 +725,7 @@ describe("a worktree in the earlier location", () => {
   test("is left registered by prune, with no teardown", () => {
     const f = fixture({ teardown: TOUCH_TEARDOWN_RECORD });
     legacy(f, "task-a");
-    prune(f.project);
+    prune(f.project, f.dir);
     expect(stateKind(f, "task-a")).toBe("legacy");
     expect(existsSync(f.teardownRecord)).toBe(false);
   });
@@ -667,7 +748,7 @@ describe("a worktree in the earlier location", () => {
     git(f.dir, ["worktree", "remove", old]);
     process.env.WORKTREE_PATH = "/inherited";
     try {
-      prune(f.project);
+      prune(f.project, f.dir);
     } finally {
       delete process.env.WORKTREE_PATH;
     }
@@ -679,7 +760,7 @@ describe("a worktree in the earlier location", () => {
     const f = fixture({ teardown: recording(TEARDOWN_RECORD) });
     const old = legacy(f, "task-a");
     rmSync(old, { recursive: true });
-    prune(f.project);
+    prune(f.project, f.dir);
     expect(recorded(f.teardownRecord)).toEqual(["task-a", old, f.dir, f.dir]);
     expect(list(f.project)).toEqual([]);
   });
@@ -688,7 +769,7 @@ describe("a worktree in the earlier location", () => {
     const f = fixture({ teardown: TOUCH_TEARDOWN_RECORD });
     const stray = join(f.dir, ".claude", "worktrees", "task-a");
     git(f.dir, ["worktree", "add", "-q", stray, "-b", "task-a"]);
-    prune(f.project);
+    prune(f.project, f.dir);
     expect(list(f.project)).toEqual([]);
     expect(existsSync(stray)).toBe(true);
     expect(existsSync(f.teardownRecord)).toBe(false);
@@ -736,14 +817,14 @@ describe("port blocks", () => {
   test("each worktree gets the lowest free block, and its scripts get its first port", async () => {
     const f = fixture({ ports: 10, setup: PORT_RECORD, teardown: PORT_RECORD });
     const [first, second] = await freeUnits();
-    await create(f.project, f.name("task-a"));
-    await create(f.project, f.name("task-b"));
+    await create(f.project, f.name("task-a"), f.dir);
+    await create(f.project, f.name("task-b"), f.dir);
     expect(firstUnitOf(f, "task-a")).toBe(first);
     expect(firstUnitOf(f, "task-b")).toBe(second);
     expect(portRecord(f)).toEqual([String(first), String(second)]);
     remove(f.project, f.name("task-a"), false);
     expect(portRecord(f)).toEqual([String(first), String(second), String(first)]);
-    await create(f.project, f.name("task-c"));
+    await create(f.project, f.name("task-c"), f.dir);
     expect(firstUnitOf(f, "task-c")).toBe(first);
   });
 
@@ -762,7 +843,7 @@ describe("port blocks", () => {
     const f = fixture({ ports: 10 });
     const [first, second] = await freeUnits();
     if (first === undefined) throw new Error("no free block");
-    await holding([first + 9], () => create(f.project, f.name("task-a")));
+    await holding([first + 9], () => create(f.project, f.name("task-a"), f.dir));
     expect(firstUnitOf(f, "task-a")).toBe(second);
   });
 
@@ -771,19 +852,19 @@ describe("port blocks", () => {
     const [first, second] = await freeUnits();
     const other = projectAt(repo());
     requestPorts(other.primary, "10\n");
-    await create(other, f.name("task-a"));
-    await create(f.project, f.name("task-a"));
+    await create(other, f.name("task-a"), other.primary);
+    await create(f.project, f.name("task-a"), f.dir);
     expect(firstUnitOf(f, "task-a")).toBe(second);
     rmSync(dirname(other.primary), { recursive: true, force: true });
-    prune(f.project);
-    await create(f.project, f.name("task-b"));
+    prune(f.project, f.dir);
+    await create(f.project, f.name("task-b"), f.dir);
     expect(firstUnitOf(f, "task-b")).toBe(first);
   });
 
   test("with no free block create refuses, keeps setup pending, and resumes once one is freed", async () => {
     const f = fixture({ ports: 10, setup: PORT_RECORD });
     const free = await freeUnits();
-    const refused = await holding(free, () => rejection(() => create(f.project, f.name("task-a"))));
+    const refused = await holding(free, () => rejection(() => create(f.project, f.name("task-a"), f.dir)));
     expect(refused.code).toBe("no_free_ports");
     expect(refused.message).toBe(
       "no block of 10 ports from 24000 to 24999 is free for task-a: worktrees hold some and other programs listen on the rest; setup is pending",
@@ -793,9 +874,36 @@ describe("port blocks", () => {
     );
     expect(stateKind(f, "task-a")).toBe("pending");
     expect(portRecord(f)).toEqual([]);
-    await create(f.project, f.name("task-a"));
+    await create(f.project, f.name("task-a"), f.dir);
     expect(stateKind(f, "task-a")).toBe("ready");
     expect(portRecord(f)).toEqual([String(free[0])]);
+  });
+
+  test("with no free block create first prunes a worktree whose branch landed and takes its block", async () => {
+    const f = fixture({ ports: 10, setup: PORT_RECORD, teardown: TOUCH_TEARDOWN_RECORD });
+    withRemote(f.dir, "origin");
+    const free = await freeUnits();
+    const landed = await create(f.project, f.name("task-a"), f.dir);
+    land(landed, "task-a");
+    await holding(free.slice(1), () => create(f.project, f.name("task-b"), f.dir));
+    expect(existsSync(f.teardownRecord)).toBe(true);
+    expect(existsSync(landed)).toBe(false);
+    expect(list(f.project).map((item) => item.state.name)).toEqual(["task-b"]);
+    expect(firstUnitOf(f, "task-b")).toBe(free[0]);
+  });
+
+  test("with no free block create never removes the worktree it sets up, even when its branch landed", async () => {
+    const f = fixture({ ports: 10, setup: PORT_RECORD });
+    withRemote(f.dir, "origin");
+    const free = await freeUnits();
+    const path = f.path("task-a");
+    git(f.dir, ["worktree", "add", "-q", "-b", "task-a", join(f.dir, "..", "staging")]);
+    land(join(f.dir, "..", "staging"), "task-a");
+    git(f.dir, ["worktree", "remove", join(f.dir, "..", "staging")]);
+    const refused = await holding(free, () => rejection(() => create(f.project, f.name("task-a"), f.dir)));
+    expect(refused.code).toBe("no_free_ports");
+    expect(existsSync(path)).toBe(true);
+    expect(stateKind(f, "task-a")).toBe("pending");
   });
 
   test("init gives a registered worktree with no block one", async () => {
@@ -814,9 +922,9 @@ describe("port blocks", () => {
   test("create takes over the block of a worktree whose directory is gone, tearing it down as prune would", async () => {
     const f = fixture({ ports: 10, teardown: PORT_RECORD });
     const firstFree = await firstFreeUnit();
-    const gone = await create(f.project, f.name("task-a"));
+    const gone = await create(f.project, f.name("task-a"), f.dir);
     rmSync(gone, { recursive: true, force: true });
-    await create(f.project, f.name("task-b"));
+    await create(f.project, f.name("task-b"), f.dir);
     expect(portRecord(f)).toEqual([String(firstFree)]);
     expect(list(f.project).map((item) => [item.state.name, item.state.kind])).toEqual([["task-b", "ready"]]);
     expect(firstUnitOf(f, "task-b")).toBe(firstFree);
@@ -827,18 +935,18 @@ describe("port blocks", () => {
     const firstFree = await firstFreeUnit();
     const other = projectAt(repo());
     requestPorts(other.primary, "10\n");
-    await create(other, f.name("task-a"));
+    await create(other, f.name("task-a"), other.primary);
     rmSync(dirname(other.primary), { recursive: true, force: true });
-    await create(f.project, f.name("task-a"));
+    await create(f.project, f.name("task-a"), f.dir);
     expect(firstUnitOf(f, "task-a")).toBe(firstFree);
   });
 
   test("create leaves the block of a gone worktree whose teardown fails, and takes the next", async () => {
     const f = fixture({ ports: 10, teardown: "exit 3" });
     const [first, second] = await freeUnits();
-    const gone = await create(f.project, f.name("task-a"));
+    const gone = await create(f.project, f.name("task-a"), f.dir);
     rmSync(gone, { recursive: true, force: true });
-    await create(f.project, f.name("task-b"));
+    await create(f.project, f.name("task-b"), f.dir);
     expect(stateKind(f, "task-a")).toBe("orphaned");
     expect(firstUnitOf(f, "task-a")).toBe(first);
     expect(firstUnitOf(f, "task-b")).toBe(second);
@@ -847,8 +955,8 @@ describe("port blocks", () => {
   test("create keeps the blocks of worktrees that are still there", async () => {
     const f = fixture({ ports: 10, teardown: PORT_RECORD });
     const [first, second] = await freeUnits();
-    await create(f.project, f.name("task-a"));
-    await create(f.project, f.name("task-b"));
+    await create(f.project, f.name("task-a"), f.dir);
+    await create(f.project, f.name("task-b"), f.dir);
     expect(portRecord(f)).toEqual([]);
     expect([firstUnitOf(f, "task-a"), firstUnitOf(f, "task-b")]).toEqual([first, second]);
   });
@@ -857,14 +965,14 @@ describe("port blocks", () => {
     const f = fixture({ ports: 10, teardown: "exit 3" });
     const firstFree = await firstFreeUnit();
     const name = f.name("task-a");
-    const path = await create(f.project, name);
+    const path = await create(f.project, name, f.dir);
     remove(f.project, name, true);
     expect(firstUnitOf(f, "task-a")).toBe(firstFree);
     script(f.dir, "worktree-teardown.sh", PORT_RECORD);
-    prune(f.project);
+    prune(f.project, f.dir);
     expect(portRecord(f)).toEqual([String(firstFree)]);
     expect(existsSync(path)).toBe(false);
-    await create(f.project, f.name("task-b"));
+    await create(f.project, f.name("task-b"), f.dir);
     expect(firstUnitOf(f, "task-b")).toBe(firstFree);
   });
 });
@@ -873,7 +981,7 @@ describe("port requests", () => {
   test("a project that asks for no ports gets no block, even with every unit in use", async () => {
     const f = fixture({ setup: PORT_RECORD });
     const free = await freeUnits();
-    await holding(free, () => create(f.project, f.name("task-a")));
+    await holding(free, () => create(f.project, f.name("task-a"), f.dir));
     expect(stateKind(f, "task-a")).toBe("ready");
     expect(blockOf(f, "task-a")).toBeNull();
     expect(portRecord(f)).toEqual(["unset"]);
@@ -882,7 +990,7 @@ describe("port requests", () => {
   test("a project that asks for 20 ports gets two consecutive free units", async () => {
     const f = fixture({ setup: PORT_RECORD, ports: 20 });
     const first = await firstFreeRun(2);
-    await create(f.project, f.name("task-a"));
+    await create(f.project, f.name("task-a"), f.dir);
     expect(blockOf(f, "task-a")).toEqual(blockAt(first, 2));
     expect(portRecord(f)).toEqual([String(first)]);
   });
@@ -890,14 +998,14 @@ describe("port requests", () => {
   test("a run skips past a unit another program listens on to the lowest run after it", async () => {
     const f = fixture({ ports: 20 });
     const first = await firstFreeRun(4);
-    await holding([first + 15], () => create(f.project, f.name("task-a")));
+    await holding([first + 15], () => create(f.project, f.name("task-a"), f.dir));
     expect(blockOf(f, "task-a")).toEqual(blockAt(unitAt(first, 2), 2));
   });
 
   test("creates started at once each get a run of their own, and leave no unit unaccounted for", async () => {
     const f = fixture({ ports: 20 });
     const names = ["task-a", "task-b", "task-c", "task-d", "task-e", "task-f"];
-    await Promise.all(names.map((name) => create(f.project, f.name(name))));
+    await Promise.all(names.map((name) => create(f.project, f.name(name), f.dir)));
     const blocks = names.map((name) => blockOf(f, name));
     for (const block of blocks) expect(block === null || block === undefined ? 0 : block.length).toBe(2);
     const held = blocks.flatMap((block) => block ?? []);
@@ -907,7 +1015,7 @@ describe("port requests", () => {
 
   test("inits of one worktree started at once agree on one block", async () => {
     const f = fixture({ ports: 10, setup: PORT_RECORD });
-    const path = await create(f.project, f.name("task-a"));
+    const path = await create(f.project, f.name("task-a"), f.dir);
     requestPorts(path, "30\n");
     await Promise.all([init(f.project, path), init(f.project, path)]);
     const block = blockOf(f, "task-a");
@@ -921,10 +1029,13 @@ describe("port requests", () => {
     const first = await firstFreeRun(3);
     const other = projectAt(repo());
     requestPorts(other.primary, "30\n");
-    await create(other, f.name("task-a"));
+    await create(other, f.name("task-a"), other.primary);
     expect(blockOf({ ...f, project: other }, "task-a")).toEqual(blockAt(first, 3));
     rmSync(dirname(other.primary), { recursive: true, force: true });
-    await Promise.all([create(f.project, f.name("task-a")), create(f.project, f.name("task-b"))]);
+    await Promise.all([
+      create(f.project, f.name("task-a"), f.dir),
+      create(f.project, f.name("task-b"), f.dir),
+    ]);
     const firsts = [firstUnitOf(f, "task-a"), firstUnitOf(f, "task-b")].sort();
     expect(firsts).toEqual([first, unitAt(first, 1)]);
   });
@@ -934,19 +1045,19 @@ describe("port requests", () => {
     const first = await firstFreeRun(3);
     const other = projectAt(repo());
     requestPorts(other.primary, "30\n");
-    await create(other, f.name("task-a"));
+    await create(other, f.name("task-a"), other.primary);
     rmSync(join(claimsDir(), String(unitAt(first, 1))));
     expect(blockOf({ ...f, project: other }, "task-a")).toEqual(blockOfUnits([first, unitAt(first, 2)]));
     rmSync(dirname(other.primary), { recursive: true, force: true });
-    prune(f.project);
-    await create(f.project, f.name("task-a"));
+    prune(f.project, f.dir);
+    await create(f.project, f.name("task-a"), f.dir);
     expect(blockOf(f, "task-a")).toEqual(blockAt(first, 3));
   });
 
   test("init mends a block whose units are no longer one run", async () => {
     const f = fixture({ ports: 30 });
     const first = await firstFreeRun(3);
-    const path = await create(f.project, f.name("task-a"));
+    const path = await create(f.project, f.name("task-a"), f.dir);
     rmSync(join(claimsDir(), String(unitAt(first, 1))));
     expect(blockOf(f, "task-a")).toEqual(blockOfUnits([first, unitAt(first, 2)]));
     await init(f.project, path);
@@ -959,7 +1070,7 @@ describe("port requests", () => {
     writeFileSync(join(f.dir, "scripts", "worktree-ports", "x", "keep"), "");
     git(f.dir, ["add", "scripts"]);
     git(f.dir, ["commit", "-q", "-m", "ports dir"]);
-    const refused = await rejection(() => create(f.project, f.name("task-a")));
+    const refused = await rejection(() => create(f.project, f.name("task-a"), f.dir));
     const file = join(f.path("task-a"), "scripts", "worktree-ports");
     expect(refused.code).toBe("invalid_ports");
     expect(refused.message).toBe(
@@ -975,7 +1086,7 @@ describe("port requests", () => {
     async (text) => {
       const f = fixture({ setup: PORT_RECORD });
       requestPorts(f.dir, text);
-      const refused = await rejection(() => create(f.project, f.name("task-a")));
+      const refused = await rejection(() => create(f.project, f.name("task-a"), f.dir));
       const file = join(f.path("task-a"), "scripts", "worktree-ports");
       expect(refused.code).toBe("invalid_ports");
       expect(refused.message).toBe(
@@ -993,7 +1104,7 @@ describe("port requests", () => {
   test("init gives back the block of a worktree whose project no longer asks for ports, and resizes a changed request", async () => {
     const f = fixture({ ports: 10 });
     const first = await firstFreeUnit();
-    const path = await create(f.project, f.name("task-a"));
+    const path = await create(f.project, f.name("task-a"), f.dir);
     expect(blockOf(f, "task-a")).toEqual(blockAt(first));
     requestPorts(path, "20\n");
     await init(f.project, path);

@@ -1,7 +1,8 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import {
+  bareRemote,
   blockText,
   firstRun,
   freeUnits,
@@ -147,6 +148,31 @@ test("AC-35 with no free block create refuses and keeps setup pending, then resu
   expect(ls(w, p.dir)).toEqual([
     { name: "task-a", state: "ready", branch: "task-a", path: p.path("task-a") },
   ]);
+});
+
+test("AC-43 with no free block create first removes a worktree whose branch landed and takes its block", async () => {
+  const w = world();
+  const p = project(w);
+  bareRemote(w, p.dir);
+  requestPorts(w, p.dir, "10\n");
+  const record = join(w.root, "ports");
+  script(w, p.dir, "worktree-setup.sh", portRecording(record));
+  const teardown = join(w.root, "teardown");
+  script(w, p.dir, "worktree-teardown.sh", `touch "${teardown}"`);
+  const free = await freeUnits();
+  succeeded(run(w, p.dir, ["create", "task-a"]));
+  const landed = p.path("task-a");
+  writeFileSync(join(landed, "work"), "work\n");
+  git(w, landed, ["add", "work"]);
+  git(w, landed, ["commit", "-q", "-m", "work"]);
+  git(w, landed, ["push", "-q", "-u", "origin", "task-a"]);
+  git(w, landed, ["push", "-q", "origin", "task-a:main"]);
+  const ran = await holding(onLoopback(free.slice(1)), () => runAsync(w, p.dir, ["create", "task-b"]));
+  expect(succeeded(ran)).toEqual([p.path("task-b")]);
+  expect(existsSync(teardown)).toBe(true);
+  expect(existsSync(landed)).toBe(false);
+  expect(portsRecorded(record)).toEqual([String(free[0]), String(free[0])]);
+  expect(lsPorts(w, p.dir)).toEqual({ "task-b": blockText(free[0], 10) });
 });
 
 test("AC-36 init gives a registration with no block one, resizes it to a changed request, mends a broken one and frees it when the request goes", async () => {

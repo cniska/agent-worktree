@@ -117,32 +117,59 @@ function upstreamPlan(
   return { kind: "delete", tracking, target: { remote: upstream.remote, ref: upstream.ref, tip: remoteTip } };
 }
 
-export function settleBranch(repo: string, branch: string | null, remotes: Remotes): BranchFate {
-  if (branch === null) return { kind: "detached" };
-  const elsewhere = worktrees(repo).find((tree) => tree.branch === branch);
-  if (elsewhere !== undefined) return { kind: "checked_out", branch, at: elsewhere.path };
+type Verdict =
+  | { readonly kind: "kept"; readonly fate: BranchFate }
+  | {
+      readonly kind: "landed";
+      readonly branch: string;
+      readonly tip: string;
+      readonly landing: Landing;
+      readonly into: string;
+      readonly plan: Exclude<UpstreamPlan, { readonly kind: "ahead" }>;
+    };
+
+function kept(fate: BranchFate): Verdict {
+  return { kind: "kept", fate };
+}
+
+function judge(repo: string, branch: string, remotes: Remotes): Verdict {
   const upstream = upstreamOf(repo, branch);
   const remote = upstream?.remote ?? DEFAULT_REMOTE;
   const view = remotes.view(remote);
   switch (view.kind) {
     case "absent":
-      return { kind: "no_remote", branch, remote };
+      return kept({ kind: "no_remote", branch, remote });
     case "remote_unreachable":
-      return { kind: "remote_unreachable", branch, remote, detail: view.detail };
+      return kept({ kind: "remote_unreachable", branch, remote, detail: view.detail });
     case "no_default_branch":
-      return { kind: "no_default_branch", branch, remote };
+      return kept({ kind: "no_default_branch", branch, remote });
     case "reached":
       break;
     default:
       return unreachable(view);
   }
   if (upstream !== null && upstream.ref === view.defaultRef)
-    return { kind: "tracks_default", branch, into: view.into };
+    return kept({ kind: "tracks_default", branch, into: view.into });
   const tip = branchTip(repo, branch);
   const plan = upstreamPlan(repo, upstream, view.heads, tip);
   const landing = landingOf(repo, tip, view.into, plan.kind === "gone");
-  if (landing === null) return { kind: "unmerged", branch, into: view.into };
-  if (plan.kind === "ahead") return { kind: "upstream_ahead", branch, upstream: plan.tracking };
+  if (landing === null) return kept({ kind: "unmerged", branch, into: view.into });
+  if (plan.kind === "ahead") return kept({ kind: "upstream_ahead", branch, upstream: plan.tracking });
+  return { kind: "landed", branch, tip, landing, into: view.into, plan };
+}
+
+export function hasPushedAndLanded(repo: string, branch: string, remotes: Remotes): boolean {
+  const verdict = judge(repo, branch, remotes);
+  return verdict.kind === "landed" && verdict.plan.kind !== "none";
+}
+
+export function settleBranch(repo: string, branch: string | null, remotes: Remotes): BranchFate {
+  if (branch === null) return { kind: "detached" };
+  const elsewhere = worktrees(repo).find((tree) => tree.branch === branch);
+  if (elsewhere !== undefined) return { kind: "checked_out", branch, at: elsewhere.path };
+  const verdict = judge(repo, branch, remotes);
+  if (verdict.kind === "kept") return verdict.fate;
+  const { tip, landing, into, plan } = verdict;
   if (plan.kind === "delete") {
     const deleted = remotes.deleteBranch(plan.target);
     if (deleted.kind === "failed")
@@ -151,7 +178,7 @@ export function settleBranch(repo: string, branch: string | null, remotes: Remot
   deleteBranchAt(repo, branch, tip);
   if (plan.kind === "gone") deleteRef(repo, plan.tracking);
   const upstreamDeleted = plan.kind === "delete" ? plan.tracking : null;
-  return { kind: "deleted", branch, landing, into: view.into, upstream: upstreamDeleted };
+  return { kind: "deleted", branch, landing, into, upstream: upstreamDeleted };
 }
 
 function shortRef(ref: string): string {

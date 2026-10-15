@@ -74,7 +74,7 @@ const createCommand: Command = {
   options: {},
   async run(positionals) {
     const target = namedTarget(positionals, this);
-    return [await create(target.project, target.name)];
+    return [await create(target.project, target.name, checkout(process.cwd()).toplevel)];
   },
 };
 
@@ -106,11 +106,13 @@ const removeCommand: Command = {
 const pruneCommand: Command = {
   name: "prune",
   usage: "agent-worktree prune",
-  summary: "prune git's stale worktree entries and tear down every registered worktree that is gone",
+  summary:
+    "prune git's stale worktree entries, tear down every registered worktree that is gone, and remove every one whose pushed branch landed",
   options: {},
   async run(positionals) {
     noPositionals(positionals, this);
-    prune(project(process.cwd()));
+    const current = checkout(process.cwd());
+    prune(current.project, current.toplevel);
     return [];
   },
 };
@@ -146,13 +148,13 @@ const hookCommand: Command = {
   options: {},
   async run(positionals) {
     noPositionals(positionals, this);
-    const current = project(process.cwd());
-    const { event, name } = parseHookEvent(current, readFileSync(0, "utf8"));
+    const current = checkout(process.cwd());
+    const { event, name } = parseHookEvent(current.project, readFileSync(0, "utf8"));
     switch (event) {
       case "WorktreeCreate":
-        return [await create(current, name)];
+        return [await create(current.project, name, current.toplevel)];
       case "WorktreeRemove":
-        return [fateText(remove(current, name, true))];
+        return [fateText(remove(current.project, name, true))];
       default:
         return unreachable(event);
     }

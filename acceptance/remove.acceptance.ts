@@ -119,6 +119,43 @@ test("AC-40 prune settles the branches of worktrees deleted by hand, and an unre
   expect(branches(w, p.dir)).toBe("task-f\ntask-g");
 });
 
+function land(w: ReturnType<typeof world>, checkout: string, branch: string): void {
+  commitIn(w, checkout, `${branch}-work`);
+  git(w, checkout, ["pull", "-q", "--no-rebase", "--no-edit", "origin", "main"]);
+  git(w, checkout, ["push", "-q", "-u", "origin", branch]);
+  git(w, checkout, ["push", "-q", "origin", `${branch}:main`]);
+}
+
+test("AC-42 prune removes a clean worktree whose pushed branch landed, and keeps the rest", () => {
+  const w = world();
+  const p = project(w);
+  const bare = bareRemote(w, p.dir);
+  const record = join(w.root, "teardown-record");
+  script(w, p.dir, "worktree-teardown.sh", recording(record));
+  const names = ["task-a", "task-b", "task-c", "task-d", "task-e", "task-f"];
+  for (const name of names) succeeded(run(w, p.dir, ["create", name]));
+  land(w, p.path("task-a"), "task-a");
+  land(w, p.path("task-c"), "task-c");
+  writeFileSync(join(p.path("task-c"), "untracked"), "work\n");
+  commitIn(w, p.path("task-d"), "unmerged");
+  git(w, p.path("task-d"), ["push", "-q", "-u", "origin", "task-d"]);
+  land(w, p.path("task-e"), "task-e");
+  git(w, p.dir, ["worktree", "lock", p.path("task-e")]);
+  land(w, p.path("task-f"), "task-f");
+  const pruned = run(w, p.path("task-f"), ["prune"]);
+  expect(succeeded(pruned)).toEqual([]);
+  expect(pruned.stderr).toContain("agent-worktree: worktree task-a removed, its branch landed\n");
+  expect(pruned.stderr).toContain(
+    "agent-worktree: branch task-a deleted, merged into origin/main, and origin/task-a deleted\n",
+  );
+  expect(recorded(record).map(({ name }) => name)).toEqual(["task-a"]);
+  expect(existsSync(p.path("task-a"))).toBe(false);
+  expect(remoteHeads(w, bare)).toBe("main\ntask-c\ntask-d\ntask-e\ntask-f");
+  expect(ls(w, p.dir).map(({ name, state }) => [name, state])).toEqual(
+    names.slice(1).map((name) => [name, "ready"]),
+  );
+});
+
 test("AC-11 remove refuses dirty and submodule worktrees without force, and locked ones always", () => {
   const w = world();
   const p = project(w);
@@ -209,8 +246,8 @@ test("AC-14 prune names the worktrees whose teardown failed and unregisters the 
     rmSync(p.path(name), { recursive: true });
   }
   expect(refused(run(w, p.dir, ["prune"]), "prune")).toEqual({
-    message: "scripts/worktree-teardown.sh failed for task-b, which stay registered",
-    act: "fix what the script reported, then run agent-worktree prune again",
+    message: "could not remove task-b (scripts/worktree-teardown.sh exited 4), which stay registered",
+    act: "fix what each cause names, then run agent-worktree prune again",
   });
   expect(recorded(record).map(({ name }) => name)).toEqual(["task-a"]);
   expect(ls(w, p.dir).map(({ name, state }) => [name, state])).toEqual([["task-b", "orphaned (prune)"]]);

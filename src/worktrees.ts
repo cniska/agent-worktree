@@ -1,17 +1,25 @@
 import type { Dirent } from "node:fs";
 import { dirname } from "node:path";
 import { invariant, unreachable } from "./assert";
-import { type BranchFate, fateText, remotesOf, settleBranch } from "./branches";
+import {
+  type BranchFate,
+  fateText,
+  hasPushedAndLanded,
+  type Remotes,
+  remotesOf,
+  settleBranch,
+} from "./branches";
 import { refuser } from "./coded-error";
 import { directoryEntries } from "./directory";
 import { describeExit, type Exit, succeeded } from "./exit";
 import {
   addWorktree,
+  type GitRefusal,
   hasSubmodules,
   isDirty,
   pruneWorktrees,
-  removeWorktree,
   type Worktree,
+  worktreeRemoval,
   worktrees,
 } from "./git";
 import {
@@ -66,7 +74,7 @@ const refuse = refuser<{
   readonly dirty: { readonly name: string; readonly path: string };
   readonly submodules: { readonly name: string; readonly path: string };
   readonly teardown_failed: { readonly name: string; readonly exit: Exit };
-  readonly teardowns_failed: { readonly names: readonly string[] };
+  readonly removals_failed: { readonly failures: readonly Failure[] };
   readonly not_a_managed_checkout: { readonly checkout: string };
   readonly legacy_location: { readonly name: string; readonly path: string; readonly target: string };
 }>({
@@ -114,9 +122,10 @@ const refuse = refuser<{
     resolve: ({ name }) =>
       `fix what the script reported and run the command again, or run agent-worktree remove --force ${name} to remove the worktree anyway`,
   },
-  teardowns_failed: {
-    message: ({ names }) => `${TEARDOWN} failed for ${names.join(", ")}, which stay registered`,
-    resolve: () => "fix what the script reported, then run agent-worktree prune again",
+  removals_failed: {
+    message: ({ failures }) =>
+      `could not remove ${failures.map(({ name, cause }) => `${name} (${cause})`).join(", ")}, which stay registered`,
+    resolve: () => "fix what each cause names, then run agent-worktree prune again",
   },
   not_a_managed_checkout: {
     message: ({ checkout }) => `${checkout} is neither the primary checkout nor a registered task worktree`,
@@ -201,29 +210,46 @@ function legacyRefusal(project: Project, name: WorktreeName, worktree: Worktree)
   return refuse("legacy_location", { name, path: worktree.path, target: worktreePath(project, name) });
 }
 
-function reap(project: Project, name: WorktreeName, path: string | null): boolean {
-  if (tearDown(project, name, path) !== null) return false;
-  unregister(project, name);
-  return true;
+function reap(project: Project, name: WorktreeName, path: string | null): Exit | null {
+  const failure = tearDown(project, name, path);
+  if (failure === null) unregister(project, name);
+  return failure;
 }
 
 function reapGone(project: Project, other: WorktreeName): boolean {
   const state = stateAt(project, other);
-  if (state.kind !== "orphaned" || !reap(project, other, state.worktree?.path ?? null)) return false;
+  if (state.kind !== "orphaned" || reap(project, other, state.worktree?.path ?? null) !== null) return false;
   if (state.block !== null)
     note(`port block ${blockText(state.block)} freed from ${other}, whose worktree is gone`);
   return true;
 }
 
-async function blockFor(project: Project, name: WorktreeName, checkout: string): Promise<Block | null> {
+async function blockFor(
+  project: Project,
+  name: WorktreeName,
+  checkout: string,
+  here: string,
+): Promise<Block | null> {
   const wanted = portRequest(checkout);
-  if (wanted !== null) return claimBlock(project, name, wanted, (other) => reapGone(project, other));
+  if (wanted !== null)
+    return claimBlock(
+      project,
+      name,
+      wanted,
+      (other) => reapGone(project, other),
+      () => sweepLanded(project, new Set([here, checkout]), remotesOf(project.primary)).removed > 0,
+    );
   releaseBlock(project, name);
   return null;
 }
 
-async function setUp(project: Project, name: WorktreeName | null, checkout: string): Promise<void> {
-  const block = name === null ? null : await blockFor(project, name, checkout);
+async function setUp(
+  project: Project,
+  name: WorktreeName | null,
+  checkout: string,
+  here: string,
+): Promise<void> {
+  const block = name === null ? null : await blockFor(project, name, checkout, here);
   const script = scriptIn(checkout, SETUP);
   if (script !== null) {
     const exit = runScript(script, checkout, { name, path: checkout, primary: project.primary, block });
@@ -247,7 +273,7 @@ function add(project: Project, name: WorktreeName, path: string, snap: Snapshot)
   register(project, name);
 }
 
-export async function create(project: Project, name: WorktreeName): Promise<string> {
+export async function create(project: Project, name: WorktreeName, here: string): Promise<string> {
   const path = worktreePath(project, name);
   const snap = snapshot(project);
   const state = stateIn(snap, project, name);
@@ -270,7 +296,7 @@ export async function create(project: Project, name: WorktreeName): Promise<stri
     default:
       return unreachable(state);
   }
-  await setUp(project, name, path);
+  await setUp(project, name, path, here);
   return path;
 }
 
@@ -296,32 +322,113 @@ function removable(project: Project, name: WorktreeName): Worktree {
   }
 }
 
-export function remove(project: Project, name: WorktreeName, force: boolean): BranchFate {
-  const worktree = removable(project, name);
-  if (worktree.locked) throw refuse("locked", { name, path: worktree.path });
-  if (!force && hasSubmodules(worktree.path)) throw refuse("submodules", { name, path: worktree.path });
-  if (!force && isDirty(worktree.path)) throw refuse("dirty", { name, path: worktree.path });
-  const failure = tearDown(project, name, worktree.path);
-  if (failure !== null && !force) throw refuse("teardown_failed", { name, exit: failure });
-  removeWorktree(project.primary, worktree.path, force);
-  if (failure === null) unregister(project, name);
-  return settleBranch(project.primary, worktree.branch, remotesOf(project.primary));
+type Blocker = "locked" | "submodules" | "dirty";
+
+function blocker(worktree: Worktree, force: boolean): Blocker | null {
+  if (worktree.locked) return "locked";
+  if (force) return null;
+  if (hasSubmodules(worktree.path)) return "submodules";
+  return isDirty(worktree.path) ? "dirty" : null;
 }
 
-export function prune(project: Project): void {
+type Unremoved =
+  | { readonly kind: "teardown_failed"; readonly exit: Exit }
+  | { readonly kind: "git_refused"; readonly refusal: GitRefusal };
+
+function removeAt(
+  project: Project,
+  name: WorktreeName,
+  worktree: Worktree,
+  force: boolean,
+): Unremoved | null {
+  const failure = tearDown(project, name, worktree.path);
+  if (failure !== null && !force) return { kind: "teardown_failed", exit: failure };
+  const refusal = worktreeRemoval(project.primary, worktree.path, force);
+  if (refusal !== null) return { kind: "git_refused", refusal };
+  if (failure === null) unregister(project, name);
+  return null;
+}
+
+export function remove(project: Project, name: WorktreeName, force: boolean): BranchFate {
+  const worktree = removable(project, name);
+  const blocked = blocker(worktree, force);
+  if (blocked !== null) throw refuse(blocked, { name, path: worktree.path });
+  const unremoved = removeAt(project, name, worktree, force);
+  if (unremoved === null) return settleBranch(project.primary, worktree.branch, remotesOf(project.primary));
+  switch (unremoved.kind) {
+    case "teardown_failed":
+      throw refuse("teardown_failed", { name, exit: unremoved.exit });
+    case "git_refused":
+      throw unremoved.refusal;
+    default:
+      return unreachable(unremoved);
+  }
+}
+
+type Failure = { readonly name: WorktreeName; readonly cause: string };
+
+function teardownCause(exit: Exit): string {
+  return `${TEARDOWN} ${describeExit(exit)}`;
+}
+
+function causeOf(unremoved: Unremoved): string {
+  switch (unremoved.kind) {
+    case "teardown_failed":
+      return teardownCause(unremoved.exit);
+    case "git_refused":
+      return unremoved.refusal.message;
+    default:
+      return unreachable(unremoved);
+  }
+}
+
+type Swept = { readonly removed: number; readonly failures: readonly Failure[] };
+
+function isSweepable(
+  project: Project,
+  worktree: Worktree,
+  spared: ReadonlySet<string>,
+  remotes: Remotes,
+): boolean {
+  if (worktree.branch === null || spared.has(worktree.path) || blocker(worktree, false) !== null)
+    return false;
+  return hasPushedAndLanded(project.primary, worktree.branch, remotes);
+}
+
+function sweepLanded(project: Project, spared: ReadonlySet<string>, remotes: Remotes): Swept {
+  const failures: Failure[] = [];
+  let removed = 0;
+  for (const { state } of list(project)) {
+    if (state.kind !== "ready" && state.kind !== "pending") continue;
+    if (!isSweepable(project, state.worktree, spared, remotes)) continue;
+    const unremoved = removeAt(project, state.name, state.worktree, false);
+    if (unremoved !== null) {
+      failures.push({ name: state.name, cause: causeOf(unremoved) });
+      continue;
+    }
+    removed += 1;
+    note(`worktree ${state.name} removed, its branch landed`);
+    note(fateText(settleBranch(project.primary, state.worktree.branch, remotes)));
+  }
+  return { removed, failures };
+}
+
+export function prune(project: Project, here: string): void {
   const before = listing(project);
   pruneWorktrees(project.primary);
-  const failed: string[] = [];
+  const failures: Failure[] = [];
   const remotes = remotesOf(project.primary);
   for (const { state } of list(project)) {
     if (state.kind !== "orphaned") continue;
     const dropped = lastListed(project, state.name, before);
-    if (!reap(project, state.name, dropped?.path ?? null)) failed.push(state.name);
+    const failure = reap(project, state.name, dropped?.path ?? null);
+    if (failure !== null) failures.push({ name: state.name, cause: teardownCause(failure) });
     if (dropped !== null && dropped.branch !== null)
       note(fateText(settleBranch(project.primary, dropped.branch, remotes)));
   }
+  failures.push(...sweepLanded(project, new Set([here]), remotes).failures);
   freeStaleBlocks();
-  if (failed.length > 0) throw refuse("teardowns_failed", { names: failed });
+  if (failures.length > 0) throw refuse("removals_failed", { failures });
 }
 
 export function list(project: Project): readonly Listed[] {
@@ -373,5 +480,5 @@ function managedName(project: Project, checkout: string): WorktreeName | null {
 }
 
 export async function init(project: Project, checkout: string): Promise<void> {
-  await setUp(project, managedName(project, checkout), checkout);
+  await setUp(project, managedName(project, checkout), checkout, checkout);
 }
