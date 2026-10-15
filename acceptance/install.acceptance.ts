@@ -8,6 +8,7 @@ import {
   freeUnits,
   git,
   HOOKS,
+  installHook,
   lsPorts,
   project,
   recorded,
@@ -21,7 +22,8 @@ import {
 
 afterEach(removeScratch);
 
-const INSTALL_USAGE = "agent-worktree install [--setup <command>] [--teardown <command>] [--ports <n>]";
+const INSTALL_USAGE =
+  "agent-worktree install [--local] [--setup <command>] [--teardown <command>] [--ports <n>]";
 
 test("AC-44 install writes the hooks it is given, create and remove run them, and a reinstall keeps the rest", async () => {
   const w = world();
@@ -66,12 +68,43 @@ test("AC-44 install writes the hooks it is given, create and remove run them, an
   expect(readFileSync(portsHook, "utf8")).toBe("20\n");
 });
 
-test("AC-45 install refuses no option, an empty command and a bad port count, and writes nothing", () => {
+test("AC-45 install refuses no hook option, an empty command and a bad port count, and writes nothing", () => {
   const w = world();
   const p = project(w);
-  for (const args of [[], ["--setup", ""], ["--ports", "0"], ["--ports", "ten"]]) {
+  for (const args of [[], ["--local"], ["--setup", ""], ["--ports", "0"], ["--ports", "ten"]]) {
     const refusal = usageRefused(run(w, p.dir, ["install", ...args]), "install");
     expect(refusal.act).toBe(INSTALL_USAGE);
   }
   expect(existsSync(join(p.dir, HOOKS))).toBe(false);
+  expect(existsSync(join(p.dir, ".git", "worktree-hooks"))).toBe(false);
+});
+
+test("AC-46 install --local keeps the hooks in the git directory, and each local hook wins over the committed one", async () => {
+  const w = world();
+  const p = project(w);
+  const committedRecord = join(w.root, "committed-record");
+  const localRecord = join(w.root, "local-record");
+  const teardownRecord = join(w.root, "teardown-record");
+  installHook(w, p.dir, "setup", recording(committedRecord));
+  installHook(w, p.dir, "teardown", recording(teardownRecord));
+  const local = join(p.dir, ".git", "worktree-hooks");
+  expect(
+    succeeded(run(w, p.dir, ["install", "--local", "--setup", recording(localRecord), "--ports", "10"])),
+  ).toEqual([join(local, "setup"), join(local, "ports")]);
+  expect(git(w, p.dir, ["status", "--porcelain"])).toBe("");
+
+  const [first] = await freeUnits();
+  const path = p.path("task-a");
+  expect(succeeded(run(w, p.dir, ["create", "task-a"]))).toEqual([path]);
+  expect(recorded(localRecord)).toEqual([{ name: "task-a", path, primary: p.dir, cwd: path }]);
+  expect(recorded(committedRecord)).toEqual([]);
+  expect(lsPorts(w, p.dir)).toEqual({ "task-a": blockText(first) });
+
+  const nested = p.path("task-b");
+  expect(succeeded(run(w, path, ["create", "task-b"]))).toEqual([nested]);
+  expect(recorded(localRecord).map(({ name }) => name)).toEqual(["task-a", "task-b"]);
+  expect(recorded(committedRecord)).toEqual([]);
+
+  succeeded(run(w, p.dir, ["remove", "task-a"]));
+  expect(recorded(teardownRecord)).toEqual([{ name: "task-a", path, primary: p.dir, cwd: p.dir }]);
 });

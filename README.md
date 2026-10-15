@@ -48,6 +48,20 @@ Each option is optional: install writes `.worktree-hooks/setup`, `.worktree-hook
 
 A setup or teardown hook is plain shell that holds its command as `command='<command>'`, so the command shows in the diff, and runs it with `sh -ec`. Setup runs in the worktree being set up, teardown in the primary checkout, since the worktree may already be gone. Both run on every resume and retry, so a command must be safe to run again.
 
+### Only in your clone
+
+In a project whose other developers do not use agent-worktree, keep the hooks out of the repository with `--local`:
+
+```bash
+agent-worktree install --local --setup "pnpm install --frozen-lockfile" --ports 10
+```
+
+`--local` writes the same hooks into `worktree-hooks/` in the clone's git directory (`git rev-parse --git-common-dir`), never into the tree, so nothing is committed and every worktree of the clone shares them. Where a clone has both, each local hook takes the place of the committed one of the same name, and a hook it lacks locally is still read from the checkout. For such a project, enable the plugin in the project's `.claude/settings.local.json` rather than its shared `.claude/settings.json`, so it stays yours too.
+
+```json
+{ "enabledPlugins": { "cniska-worktree@cniska": true } }
+```
+
 ### Ports
 
 Ports are an add-on. A project whose worktrees need ports of their own, such as for a stack each worktree runs, installs how many with `--ports`, one whole number from 1 to 1000, which becomes `.worktree-hooks/ports`:
@@ -82,7 +96,7 @@ git worktree remove ../<name>
 | `agent-worktree ls` | One line per worktree: name, state, branch, port block, path. |
 | `agent-worktree path <name>` | Print the worktree's path. |
 | `agent-worktree hook` | The plugin's `WorktreeCreate` and `WorktreeRemove` entry: reads the event from stdin. |
-| `agent-worktree install [--setup <command>] [--teardown <command>] [--ports <n>]` | Write the hook each option names into `.worktree-hooks/`, leaving the others as they are, and print each path. |
+| `agent-worktree install [--local] [--setup <command>] [--teardown <command>] [--ports <n>]` | Write the hook each option names into `.worktree-hooks/`, or with `--local` into the clone's git directory, leaving the others as they are, and print each path. |
 
 Results go to stdout. A refusal goes to stderr with the act that resolves it, and exits 1; a usage error exits 2.
 

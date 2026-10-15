@@ -1104,6 +1104,22 @@ describe("port requests", () => {
     },
   );
 
+  test("an invalid local request is refused, naming the local install", async () => {
+    const f = fixture({ setup: PORT_RECORD, ports: 10 });
+    const file = join(f.project.commonDir, "worktree-hooks", "ports");
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, "ten\n");
+    const refused = await rejection(() => create(f.project, f.name("task-a"), f.dir));
+    expect(refused.code).toBe("invalid_ports");
+    expect(refused.message).toBe(
+      `${file} must hold one whole number of ports from 1 to 1000, and holds: "ten\\n"`,
+    );
+    expect(refused.resolve).toBe(
+      `run agent-worktree install --local --ports <n> with the number of ports the worktree needs, or delete ${file} when it needs none, then run the command again`,
+    );
+    expect(blockOf(f, "task-a")).toBeNull();
+  });
+
   test("init gives back the block of a worktree whose project no longer asks for ports, and resizes a changed request", async () => {
     const f = fixture({ ports: 10 });
     const first = await firstFreeUnit();

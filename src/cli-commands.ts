@@ -182,9 +182,15 @@ function portsOption(value: unknown, command: Command): PortRequest | null {
 
 const installCommand: Command = {
   name: "install",
-  usage: "agent-worktree install [--setup <command>] [--teardown <command>] [--ports <n>]",
-  summary: "write the project's setup and teardown commands and port count into its hooks",
-  options: { setup: { type: "string" }, teardown: { type: "string" }, ports: { type: "string" } },
+  usage: "agent-worktree install [--local] [--setup <command>] [--teardown <command>] [--ports <n>]",
+  summary:
+    "write the project's setup and teardown commands and port count into its hooks, or with --local into the clone's own",
+  options: {
+    local: { type: "boolean" },
+    setup: { type: "string" },
+    teardown: { type: "string" },
+    ports: { type: "string" },
+  },
   async run(positionals, values) {
     noPositionals(positionals, this);
     const installed = {
@@ -197,7 +203,13 @@ const installCommand: Command = {
         "agent-worktree install takes at least one of --setup, --teardown and --ports",
         this.usage,
       );
-    return install(checkout(process.cwd()).toplevel, installed);
+    const current = checkout(process.cwd());
+    return install(
+      current.project,
+      current.toplevel,
+      values.local === true ? "local" : "committed",
+      installed,
+    );
   },
 };
 

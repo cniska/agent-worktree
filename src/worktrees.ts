@@ -230,7 +230,7 @@ async function blockFor(
   checkout: string,
   here: string,
 ): Promise<Block | null> {
-  const wanted = portRequest(checkout);
+  const wanted = portRequest(project, checkout);
   if (wanted !== null)
     return claimBlock(
       project,
@@ -250,7 +250,7 @@ async function setUp(
   here: string,
 ): Promise<void> {
   const block = name === null ? null : await blockFor(project, name, checkout, here);
-  const hook = hookIn(checkout, "setup");
+  const hook = hookIn(project, checkout, "setup");
   if (hook !== null) {
     const exit = runHook(hook, checkout, { name, path: checkout, primary: project.primary, block });
     if (!succeeded(exit)) throw refuse("setup_failed", { hook, checkout, exit });
@@ -261,7 +261,7 @@ async function setUp(
 type FailedTeardown = { readonly hook: string; readonly exit: Exit };
 
 function tearDown(project: Project, name: WorktreeName, path: string | null): FailedTeardown | null {
-  const hook = hookIn(project.primary, "teardown");
+  const hook = hookIn(project, project.primary, "teardown");
   if (hook === null) return null;
   const block = blockOf(project, name);
   const exit = runHook(hook, project.primary, { name, path, primary: project.primary, block });

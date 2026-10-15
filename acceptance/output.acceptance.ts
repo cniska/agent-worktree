@@ -19,7 +19,8 @@ const REMOVE_USAGE = "agent-worktree remove [--force] <name>";
 
 const LS_USAGE = "agent-worktree ls";
 
-const INSTALL_USAGE = "agent-worktree install [--setup <command>] [--teardown <command>] [--ports <n>]";
+const INSTALL_USAGE =
+  "agent-worktree install [--local] [--setup <command>] [--teardown <command>] [--ports <n>]";
 
 const USAGES = [
   "agent-worktree create <name>",

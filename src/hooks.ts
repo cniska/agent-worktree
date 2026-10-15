@@ -1,13 +1,14 @@
 import { spawnSync } from "node:child_process";
 import { accessSync, chmodSync, constants, lstatSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { unreachable } from "./assert";
 import { refuser, systemErrorCode } from "./coded-error";
 import { type Exit, exitOf } from "./exit";
 import { note } from "./log";
 import { type Block, PORT_LIMIT, type PortRequest, parsePortRequest } from "./ports";
-import type { WorktreeName } from "./project";
+import type { Project, WorktreeName } from "./project";
 
-const HOOKS_DIR = ".worktree-hooks";
+const HOOKS_DIR = "worktree-hooks";
 
 export type CommandHook = "setup" | "teardown";
 
@@ -29,7 +30,7 @@ type HookEnv = {
 const refuse = refuser<{
   readonly hook_not_executable: { readonly hook: string };
   readonly hook_unrunnable: { readonly hook: string; readonly detail: string };
-  readonly invalid_ports: { readonly hook: string; readonly checkout: string; readonly found: string };
+  readonly invalid_ports: { readonly found: Found; readonly checkout: string; readonly holds: string };
 }>({
   hook_not_executable: {
     message: ({ hook }) => `${hook} exists but is not executable`,
@@ -40,24 +41,47 @@ const refuse = refuser<{
     resolve: () => "fix the hook's interpreter line, then run the command again",
   },
   invalid_ports: {
-    message: ({ hook, found }) => `${hook} must hold one whole number of ports ${PORT_LIMIT}, and ${found}`,
-    resolve: ({ hook, checkout }) =>
-      `run agent-worktree install --ports <n> in ${checkout} with the number of ports the worktree needs, or delete ${hook} when it needs none, then run the command again`,
+    message: ({ found, holds }) =>
+      `${found.hook} must hold one whole number of ports ${PORT_LIMIT}, and ${holds}`,
+    resolve: ({ found, checkout }) =>
+      `run ${reinstall(found.place, checkout)} with the number of ports the worktree needs, or delete ${found.hook} when it needs none, then run the command again`,
   },
 });
 
-function hooksDir(checkout: string): string {
-  return join(checkout, HOOKS_DIR);
+export type Place = "committed" | "local";
+
+function hooksDir(project: Project, checkout: string, place: Place): string {
+  return place === "local" ? join(project.commonDir, HOOKS_DIR) : join(checkout, `.${HOOKS_DIR}`);
 }
 
-export function portRequest(checkout: string): PortRequest | null {
-  const hook = join(hooksDir(checkout), PORTS);
-  if (!exists(hook)) return null;
-  const text = readText(hook);
-  if (text === null) throw refuse("invalid_ports", { hook, checkout, found: "cannot be read as a file" });
+type Found = { readonly hook: string; readonly place: Place };
+
+function reinstall(place: Place, checkout: string): string {
+  switch (place) {
+    case "local":
+      return "agent-worktree install --local --ports <n>";
+    case "committed":
+      return `agent-worktree install --ports <n> in ${checkout}`;
+    default:
+      return unreachable(place);
+  }
+}
+
+function find(project: Project, checkout: string, name: string): Found | null {
+  const local = join(hooksDir(project, checkout, "local"), name);
+  if (exists(local)) return { hook: local, place: "local" };
+  const committed = join(hooksDir(project, checkout, "committed"), name);
+  return exists(committed) ? { hook: committed, place: "committed" } : null;
+}
+
+export function portRequest(project: Project, checkout: string): PortRequest | null {
+  const found = find(project, checkout, PORTS);
+  if (found === null) return null;
+  const text = readText(found.hook);
+  if (text === null) throw refuse("invalid_ports", { found, checkout, holds: "cannot be read as a file" });
   const request = parsePortRequest(text);
   if (request === null)
-    throw refuse("invalid_ports", { hook, checkout, found: `holds: ${JSON.stringify(text)}` });
+    throw refuse("invalid_ports", { found, checkout, holds: `holds: ${JSON.stringify(text)}` });
   return request;
 }
 
@@ -94,9 +118,9 @@ function exists(path: string): boolean {
   return lstatSync(path, { throwIfNoEntry: false }) !== undefined;
 }
 
-export function hookIn(checkout: string, name: CommandHook): string | null {
-  const hook = join(hooksDir(checkout), name);
-  if (!exists(hook)) return null;
+export function hookIn(project: Project, checkout: string, name: CommandHook): string | null {
+  const hook = find(project, checkout, name)?.hook ?? null;
+  if (hook === null) return null;
   if (!isExecutable(hook)) throw refuse("hook_not_executable", { hook });
   return hook;
 }
@@ -138,8 +162,13 @@ function toWrite({ setup, teardown, ports }: Installed): readonly Written[] {
   ];
 }
 
-export function install(checkout: string, installed: Installed): readonly string[] {
-  const dir = hooksDir(checkout);
+export function install(
+  project: Project,
+  checkout: string,
+  place: Place,
+  installed: Installed,
+): readonly string[] {
+  const dir = hooksDir(project, checkout, place);
   mkdirSync(dir, { recursive: true });
   return toWrite(installed).map(({ name, text, mode }) => {
     const hook = join(dir, name);
