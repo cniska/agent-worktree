@@ -150,7 +150,7 @@ function commandHook(command: string): string {
 
 const RUNNABLE = 0o755;
 
-const READ_ONLY = 0o644;
+const NOT_RUNNABLE = 0o644;
 
 type Written = { readonly name: string; readonly text: string; readonly mode: number };
 
@@ -158,7 +158,7 @@ function toWrite({ setup, teardown, ports }: Installed): readonly Written[] {
   return [
     ...(setup === null ? [] : [{ name: "setup", text: commandHook(setup), mode: RUNNABLE }]),
     ...(teardown === null ? [] : [{ name: "teardown", text: commandHook(teardown), mode: RUNNABLE }]),
-    ...(ports === null ? [] : [{ name: PORTS, text: `${ports.ports}\n`, mode: READ_ONLY }]),
+    ...(ports === null ? [] : [{ name: PORTS, text: `${ports.ports}\n`, mode: NOT_RUNNABLE }]),
   ];
 }
 
