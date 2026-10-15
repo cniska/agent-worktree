@@ -175,6 +175,29 @@ test("AC-43 with no free block create first removes a worktree whose branch land
   expect(lsPorts(w, p.dir)).toEqual({ "task-b": blockText(free[0], 10) });
 });
 
+test("AC-43 a landed worktree git refuses to remove is noted with why, and create still refuses for want of a block", async () => {
+  const w = world();
+  const p = project(w);
+  bareRemote(w, p.dir);
+  requestPorts(w, p.dir, "10\n");
+  script(w, p.dir, "worktree-teardown.sh", 'touch "$WORKTREE_PATH/left"');
+  const free = await freeUnits();
+  succeeded(run(w, p.dir, ["create", "task-a"]));
+  const landed = p.path("task-a");
+  writeFileSync(join(landed, "work"), "work\n");
+  git(w, landed, ["add", "work"]);
+  git(w, landed, ["commit", "-q", "-m", "work"]);
+  git(w, landed, ["push", "-q", "-u", "origin", "task-a"]);
+  git(w, landed, ["push", "-q", "origin", "task-a:main"]);
+  const ran = await holding(onLoopback(free.slice(1)), () => runAsync(w, p.dir, ["create", "task-b"]));
+  expect(refused(ran, "create").message).toStartWith("no block of 10 ports");
+  expect(ran.stderr).toContain(
+    `agent-worktree: worktree task-a not removed, though its branch landed: git worktree remove ${landed} refused: `,
+  );
+  expect(existsSync(join(landed, "left"))).toBe(true);
+  expect(lsPorts(w, p.dir)).toEqual({ "task-a": blockText(free[0], 10), "task-b": "-" });
+});
+
 test("AC-36 init gives a registration with no block one, resizes it to a changed request, mends a broken one and frees it when the request goes", async () => {
   const w = world();
   const p = project(w);

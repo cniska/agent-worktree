@@ -237,7 +237,7 @@ async function blockFor(
       name,
       wanted,
       (other) => reapGone(project, other),
-      () => sweepLanded(project, new Set([here, checkout]), remotesOf(project.primary)).removed > 0,
+      () => sweptBeforeClaim(project, new Set([here, checkout])),
     );
   releaseBlock(project, name);
   return null;
@@ -411,6 +411,13 @@ function sweepLanded(project: Project, spared: ReadonlySet<string>, remotes: Rem
     note(fateText(settleBranch(project.primary, state.worktree.branch, remotes)));
   }
   return { removed, failures };
+}
+
+function sweptBeforeClaim(project: Project, spared: ReadonlySet<string>): boolean {
+  const swept = sweepLanded(project, spared, remotesOf(project.primary));
+  for (const { name, cause } of swept.failures)
+    note(`worktree ${name} not removed, though its branch landed: ${cause}`);
+  return swept.removed > 0;
 }
 
 export function prune(project: Project, here: string): void {
