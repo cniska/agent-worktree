@@ -32,7 +32,7 @@ export function scratchDir(): string {
 
 export function removeScratchDirs(): void {
   for (const dir of scratchDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
-  scriptFiles.clear();
+  hookFiles.clear();
 }
 
 export function git(cwd: string, args: readonly string[]): string {
@@ -75,30 +75,32 @@ export function recorded(path: string): readonly string[] {
     .filter((line) => line !== "");
 }
 
-const scriptFiles = new Map<string, string>();
+const hookFiles = new Map<string, string>();
 
-function scriptFile(body: string): string {
-  const known = scriptFiles.get(body);
+function hookFile(body: string): string {
+  const known = hookFiles.get(body);
   if (known !== undefined) return known;
-  const path = join(scratchDir(), "script.sh");
+  const path = join(scratchDir(), "hook.sh");
   writeFileSync(path, `#!/bin/sh\n${body}\n`);
   chmodSync(path, 0o755);
-  scriptFiles.set(body, path);
+  hookFiles.set(body, path);
   return path;
 }
 
-type ScriptName = "worktree-setup.sh" | "worktree-teardown.sh";
+export const HOOKS = ".worktree-hooks";
 
-function linkScript(checkout: string, name: ScriptName, body: string): void {
-  const path = join(checkout, "scripts", name);
+type HookName = "setup" | "teardown";
+
+function linkHook(checkout: string, name: HookName, body: string): void {
+  const path = join(checkout, HOOKS, name);
   mkdirSync(dirname(path), { recursive: true });
   rmSync(path, { force: true });
-  symlinkSync(scriptFile(body), path);
+  symlinkSync(hookFile(body), path);
 }
 
-export function script(checkout: string, name: ScriptName, body: string): void {
-  linkScript(checkout, name, body);
-  git(checkout, ["add", `scripts/${name}`]);
+export function hook(checkout: string, name: HookName, body: string): void {
+  linkHook(checkout, name, body);
+  git(checkout, ["add", HOOKS]);
   git(checkout, ["commit", "-q", "-m", name]);
 }
 
@@ -149,11 +151,11 @@ export async function firstFreeRun(count: number): Promise<Unit> {
 }
 
 export function requestPorts(checkout: string, ports: string): void {
-  const path = join(checkout, "scripts", "worktree-ports");
+  const path = join(checkout, HOOKS, "ports");
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, ports);
-  git(checkout, ["add", "scripts/worktree-ports"]);
-  git(checkout, ["commit", "-q", "-m", "worktree-ports"]);
+  git(checkout, ["add", HOOKS]);
+  git(checkout, ["commit", "-q", "-m", "ports"]);
 }
 
 type FixtureOptions = { setup?: string; teardown?: string; ports?: number };
@@ -162,10 +164,10 @@ export function fixture({ setup, teardown, ports }: FixtureOptions = {}): Fixtur
   const dir = repo();
   if (ports !== undefined) requestPorts(dir, `${ports}\n`);
   process.env.XDG_DATA_HOME = join(dirname(dir), "data");
-  linkScript(dir, "worktree-setup.sh", setup ?? recording(SETUP_RECORD));
-  if (teardown !== undefined) linkScript(dir, "worktree-teardown.sh", teardown);
-  git(dir, ["add", "scripts"]);
-  git(dir, ["commit", "-q", "-m", "scripts"]);
+  linkHook(dir, "setup", setup ?? recording(SETUP_RECORD));
+  if (teardown !== undefined) linkHook(dir, "teardown", teardown);
+  git(dir, ["add", HOOKS]);
+  git(dir, ["commit", "-q", "-m", "hooks"]);
   const current = projectAt(dir);
   const names = new Map<string, WorktreeName>();
   const name = (raw: string): WorktreeName => {

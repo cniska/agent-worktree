@@ -1,0 +1,6 @@
+#!/bin/sh
+set -eu
+
+command='scripts/stack-down.sh'
+
+exec sh -ec "$command"

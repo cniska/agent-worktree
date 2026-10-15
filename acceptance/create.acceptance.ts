@@ -3,6 +3,8 @@ import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   git,
+  HOOKS,
+  installHook,
   ls,
   project,
   recorded,
@@ -11,7 +13,6 @@ import {
   removeScratch,
   repo,
   run,
-  script,
   succeeded,
   world,
 } from "./harness";
@@ -64,7 +65,7 @@ test("AC-6 create makes the worktree on its branch, sets it up once, and lists i
   const w = world();
   const p = project(w);
   const record = join(w.root, "setup-record");
-  script(w, p.dir, "worktree-setup.sh", recording(record));
+  installHook(w, p.dir, "setup", recording(record));
   const path = p.path("task-a");
   const head = git(w, p.dir, ["rev-parse", "HEAD"]);
   expect(succeeded(run(w, p.dir, ["create", "task-a"]))).toEqual([path]);
@@ -97,11 +98,11 @@ test("AC-7 a failed setup leaves the worktree pending, and the rerun resumes it"
   const p = project(w);
   const record = join(w.root, "setup-record");
   const fixed = join(w.root, "fixed");
-  script(w, p.dir, "worktree-setup.sh", `[ -f "${fixed}" ] || exit 3\n${recording(record)}`);
+  installHook(w, p.dir, "setup", `[ -f "${fixed}" ] || exit 3\n${recording(record)}`);
   const path = p.path("task-a");
   expect(refused(run(w, p.dir, ["create", "task-a"]), "create")).toEqual({
-    message: `scripts/worktree-setup.sh exited 3 in ${path}; setup is pending`,
-    act: "fix what the script reported, then run the command again to resume",
+    message: `${join(path, HOOKS, "setup")} exited 3 in ${path}; setup is pending`,
+    act: "fix what the hook reported, then run the command again to resume",
   });
   expect(ls(w, p.dir)).toEqual([{ name: "task-a", state: "setup pending", branch: "task-a", path }]);
   writeFileSync(join(path, "work"), "kept\n");
@@ -160,15 +161,15 @@ test("AC-9 init sets up the primary, a pending task worktree, and refuses any ot
   const p = project(w);
   const record = join(w.root, "setup-record");
   const fixed = join(w.root, "fixed");
-  script(w, p.dir, "worktree-setup.sh", `[ -f "${fixed}" ] || exit 3\n${recording(record)}`);
+  installHook(w, p.dir, "setup", `[ -f "${fixed}" ] || exit 3\n${recording(record)}`);
   writeFileSync(fixed, "");
   expect(succeeded(run(w, p.dir, ["init"], { env: { WORKTREE_NAME: "inherited" } }))).toEqual([]);
   expect(recorded(record)).toEqual([{ name: "unset", path: p.dir, primary: p.dir, cwd: p.dir }]);
   rmSync(fixed);
   const path = p.path("task-a");
   expect(refused(run(w, p.dir, ["create", "task-a"]), "create")).toEqual({
-    message: `scripts/worktree-setup.sh exited 3 in ${path}; setup is pending`,
-    act: "fix what the script reported, then run the command again to resume",
+    message: `${join(path, HOOKS, "setup")} exited 3 in ${path}; setup is pending`,
+    act: "fix what the hook reported, then run the command again to resume",
   });
   expect(ls(w, p.dir)).toEqual([{ name: "task-a", state: "setup pending", branch: "task-a", path }]);
   writeFileSync(fixed, "");

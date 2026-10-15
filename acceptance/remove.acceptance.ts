@@ -4,6 +4,8 @@ import { join } from "node:path";
 import {
   bareRemote,
   git,
+  HOOKS,
+  installHook,
   ls,
   project,
   recorded,
@@ -11,7 +13,6 @@ import {
   refused,
   removeScratch,
   run,
-  script,
   succeeded,
   world,
 } from "./harness";
@@ -22,7 +23,7 @@ test("AC-10 remove tears down in the primary, removes the worktree and keeps a b
   const w = world();
   const p = project(w);
   const record = join(w.root, "teardown-record");
-  script(w, p.dir, "worktree-teardown.sh", recording(record));
+  installHook(w, p.dir, "teardown", recording(record));
   const path = p.path("task-a");
   succeeded(run(w, p.dir, ["create", "task-a"]));
   expect(succeeded(run(w, p.dir, ["remove", "task-a"]))).toEqual(["branch task-a kept, no remote origin"]);
@@ -131,7 +132,7 @@ test("AC-42 prune removes a clean worktree whose pushed branch landed, and keeps
   const p = project(w);
   const bare = bareRemote(w, p.dir);
   const record = join(w.root, "teardown-record");
-  script(w, p.dir, "worktree-teardown.sh", recording(record));
+  installHook(w, p.dir, "teardown", recording(record));
   const names = ["task-a", "task-b", "task-c", "task-d", "task-e", "task-f"];
   for (const name of names) succeeded(run(w, p.dir, ["create", name]));
   land(w, p.path("task-a"), "task-a");
@@ -203,12 +204,12 @@ test("AC-12 a failed teardown keeps the worktree, force removes it, and prune fi
   const w = world();
   const p = project(w);
   const fixed = join(w.root, "fixed");
-  script(w, p.dir, "worktree-teardown.sh", `[ -f "${fixed}" ] || exit 4`);
+  installHook(w, p.dir, "teardown", `[ -f "${fixed}" ] || exit 4`);
   const path = p.path("task-a");
   succeeded(run(w, p.dir, ["create", "task-a"]));
   expect(refused(run(w, p.dir, ["remove", "task-a"]), "remove")).toEqual({
-    message: "scripts/worktree-teardown.sh exited 4 for task-a; the worktree is kept",
-    act: "fix what the script reported and run the command again, or run agent-worktree remove --force task-a to remove the worktree anyway",
+    message: `${join(p.dir, HOOKS, "teardown")} exited 4 for task-a; the worktree is kept`,
+    act: "fix what the hook reported and run the command again, or run agent-worktree remove --force task-a to remove the worktree anyway",
   });
   expect(ls(w, p.dir)).toEqual([{ name: "task-a", state: "ready", branch: "task-a", path }]);
   expect(succeeded(run(w, p.dir, ["remove", "--force", "task-a"]))).toEqual([
@@ -235,10 +236,10 @@ test("AC-14 prune names the worktrees whose teardown failed and unregisters the 
   const p = project(w);
   const fixed = join(w.root, "fixed");
   const record = join(w.root, "teardown-record");
-  script(
+  installHook(
     w,
     p.dir,
-    "worktree-teardown.sh",
+    "teardown",
     `[ "$WORKTREE_NAME" = task-b ] && [ ! -f "${fixed}" ] && exit 4\n${recording(record)}`,
   );
   for (const name of ["task-a", "task-b"]) {
@@ -246,7 +247,7 @@ test("AC-14 prune names the worktrees whose teardown failed and unregisters the 
     rmSync(p.path(name), { recursive: true });
   }
   expect(refused(run(w, p.dir, ["prune"]), "prune")).toEqual({
-    message: "could not remove task-b (scripts/worktree-teardown.sh exited 4), which stay registered",
+    message: `could not remove task-b (${join(p.dir, HOOKS, "teardown")} exited 4), which stay registered`,
     act: "fix what each cause names, then run agent-worktree prune again",
   });
   expect(recorded(record).map(({ name }) => name)).toEqual(["task-a"]);

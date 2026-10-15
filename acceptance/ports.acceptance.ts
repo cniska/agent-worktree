@@ -7,7 +7,9 @@ import {
   firstRun,
   freeUnits,
   git,
+  HOOKS,
   holding,
+  installHook,
   ls,
   lsPorts,
   onLoopback,
@@ -21,7 +23,6 @@ import {
   run,
   runAsync,
   runAtOnce,
-  script,
   succeeded,
   world,
 } from "./harness";
@@ -33,7 +34,7 @@ test("AC-30 each worktree gets the lowest free block as WORKTREE_PORT, shown by 
   const p = project(w);
   requestPorts(w, p.dir, "10\n");
   const record = join(w.root, "ports");
-  script(w, p.dir, "worktree-setup.sh", portRecording(record));
+  installHook(w, p.dir, "setup", portRecording(record));
   const [first, second] = await freeUnits();
   const created = run(w, p.dir, ["create", "task-a"]);
   succeeded(created);
@@ -50,7 +51,7 @@ test("AC-31 remove gives teardown the block and frees it for the next create", a
   const p = project(w);
   requestPorts(w, p.dir, "10\n");
   const record = join(w.root, "ports");
-  script(w, p.dir, "worktree-teardown.sh", portRecording(record));
+  installHook(w, p.dir, "teardown", portRecording(record));
   const [first] = await freeUnits();
   succeeded(run(w, p.dir, ["create", "task-a"]));
   succeeded(run(w, p.dir, ["create", "task-b"]));
@@ -115,7 +116,7 @@ test("AC-34 creates started at once each get a block of their own, and inits of 
   expect(spans.every(([first = 0], index) => index === 0 || first > (spans[index - 1]?.[1] ?? 0))).toBe(true);
   const path = p.path("task-a");
   const record = join(w.root, "ports");
-  script(w, path, "worktree-setup.sh", portRecording(record));
+  installHook(w, path, "setup", portRecording(record));
   requestPorts(w, path, "30\n");
   const inits = await runAtOnce(w, path, [["init"], ["init"]]);
   for (const each of inits) succeeded(each);
@@ -130,7 +131,7 @@ test("AC-35 with no free block create refuses and keeps setup pending, then resu
   const p = project(w);
   requestPorts(w, p.dir, "10\n");
   const record = join(w.root, "ports");
-  script(w, p.dir, "worktree-setup.sh", portRecording(record));
+  installHook(w, p.dir, "setup", portRecording(record));
   const free = await freeUnits();
   const ran = await holding(onLoopback(free), () => runAsync(w, p.dir, ["create", "task-a"]));
   expect(refused(ran, "create")).toEqual({
@@ -156,9 +157,9 @@ test("AC-43 with no free block create first removes a worktree whose branch land
   bareRemote(w, p.dir);
   requestPorts(w, p.dir, "10\n");
   const record = join(w.root, "ports");
-  script(w, p.dir, "worktree-setup.sh", portRecording(record));
+  installHook(w, p.dir, "setup", portRecording(record));
   const teardown = join(w.root, "teardown");
-  script(w, p.dir, "worktree-teardown.sh", `touch "${teardown}"`);
+  installHook(w, p.dir, "teardown", `touch "${teardown}"`);
   const free = await freeUnits();
   succeeded(run(w, p.dir, ["create", "task-a"]));
   const landed = p.path("task-a");
@@ -180,7 +181,7 @@ test("AC-43 a landed worktree git refuses to remove is noted with why, and creat
   const p = project(w);
   bareRemote(w, p.dir);
   requestPorts(w, p.dir, "10\n");
-  script(w, p.dir, "worktree-teardown.sh", 'touch "$WORKTREE_PATH/left"');
+  installHook(w, p.dir, "teardown", 'touch "$WORKTREE_PATH/left"');
   const free = await freeUnits();
   succeeded(run(w, p.dir, ["create", "task-a"]));
   const landed = p.path("task-a");
@@ -203,7 +204,7 @@ test("AC-36 init gives a registration with no block one, resizes it to a changed
   const p = project(w);
   requestPorts(w, p.dir, "10\n");
   const record = join(w.root, "ports");
-  script(w, p.dir, "worktree-setup.sh", portRecording(record));
+  installHook(w, p.dir, "setup", portRecording(record));
   const path = p.path("task-a");
   mkdirSync(dirname(path), { recursive: true });
   git(w, p.dir, ["worktree", "add", "-q", path, "-b", "task-a"]);
@@ -223,7 +224,7 @@ test("AC-36 init gives a registration with no block one, resizes it to a changed
   expect(lsPorts(w, p.dir)).toEqual({ "task-a": `${blockText(three)},${blockText(three + 20)}` });
   succeeded(run(w, path, ["init"]));
   expect(lsPorts(w, p.dir)).toEqual({ "task-a": blockText(three, 30) });
-  rmSync(join(path, "scripts", "worktree-ports"));
+  rmSync(join(path, HOOKS, "ports"));
   succeeded(run(w, path, ["init"]));
   expect(lsPorts(w, p.dir)).toEqual({ "task-a": "-" });
 });
@@ -233,12 +234,12 @@ test("AC-37 a worktree forced out past a failed teardown keeps its block until p
   const p = project(w);
   requestPorts(w, p.dir, "10\n");
   const record = join(w.root, "ports");
-  script(w, p.dir, "worktree-teardown.sh", "exit 3");
+  installHook(w, p.dir, "teardown", "exit 3");
   const [first] = await freeUnits();
   succeeded(run(w, p.dir, ["create", "task-a"]));
   succeeded(run(w, p.dir, ["remove", "--force", "task-a"]));
   expect(lsPorts(w, p.dir)).toEqual({ "task-a": blockText(first) });
-  script(w, p.dir, "worktree-teardown.sh", portRecording(record));
+  installHook(w, p.dir, "teardown", portRecording(record));
   succeeded(run(w, p.dir, ["prune"]));
   expect(portsRecorded(record)).toEqual([String(first)]);
   succeeded(run(w, p.dir, ["create", "task-b"]));
@@ -250,7 +251,7 @@ test("AC-38 create takes over the block of a worktree whose directory is gone, r
   const p = project(w);
   requestPorts(w, p.dir, "10\n");
   const record = join(w.root, "ports");
-  script(w, p.dir, "worktree-teardown.sh", portRecording(record));
+  installHook(w, p.dir, "teardown", portRecording(record));
   const [first] = await freeUnits();
   succeeded(run(w, p.dir, ["create", "task-a"]));
   rmSync(p.path("task-a"), { recursive: true, force: true });
@@ -267,7 +268,7 @@ test("AC-38 a gone worktree whose teardown fails keeps its block, and create tak
   const w = world();
   const p = project(w);
   requestPorts(w, p.dir, "10\n");
-  script(w, p.dir, "worktree-teardown.sh", "exit 3");
+  installHook(w, p.dir, "teardown", "exit 3");
   const [first, second] = await freeUnits();
   succeeded(run(w, p.dir, ["create", "task-a"]));
   rmSync(p.path("task-a"), { recursive: true, force: true });
@@ -296,7 +297,7 @@ test("AC-41 a project gets ports only when it asks, as many as it asks for", asy
   const w = world();
   const p = project(w);
   const record = join(w.root, "ports");
-  script(w, p.dir, "worktree-setup.sh", portRecording(record));
+  installHook(w, p.dir, "setup", portRecording(record));
   const free = await freeUnits();
   const plain = await holding(onLoopback(free), () => runAsync(w, p.dir, ["create", "task-a"]));
   expect(succeeded(plain)).toEqual([p.path("task-a")]);
@@ -308,10 +309,10 @@ test("AC-41 a project gets ports only when it asks, as many as it asks for", asy
   expect(portsRecorded(record)).toEqual(["unset", String(first)]);
   expect(lsPorts(w, p.dir)["task-b"]).toBe(blockText(first, 20));
   requestPorts(w, p.dir, "ten\n");
-  const file = join(p.path("task-c"), "scripts", "worktree-ports");
+  const file = join(p.path("task-c"), HOOKS, "ports");
   expect(refused(run(w, p.dir, ["create", "task-c"]), "create")).toEqual({
     message: `${file} must hold one whole number of ports from 1 to 1000, and holds: "ten\\n"`,
-    act: `write the number of ports the worktree needs into ${file}, or delete it when it needs none, then run the command again`,
+    act: `run agent-worktree install --ports <n> in ${p.path("task-c")} with the number of ports the worktree needs, or delete ${file} when it needs none, then run the command again`,
   });
   expect(ls(w, p.dir).find(({ name }) => name === "task-c")?.state).toBe("setup pending");
   expect(lsPorts(w, p.dir)["task-c"]).toBe("-");

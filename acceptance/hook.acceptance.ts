@@ -3,6 +3,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   hookEvent,
+  installHook,
   ls,
   PLUGIN,
   pluginCommand,
@@ -10,7 +11,6 @@ import {
   refused,
   removeScratch,
   run,
-  script,
   succeeded,
   world,
 } from "./harness";
@@ -20,7 +20,7 @@ afterEach(removeScratch);
 test("AC-18 hook creates on WorktreeCreate and force-removes on WorktreeRemove", () => {
   const w = world();
   const p = project(w);
-  script(w, p.dir, "worktree-setup.sh", "echo installing dependencies");
+  installHook(w, p.dir, "setup", "echo installing dependencies");
   const path = p.path("task-a");
   const created = run(w, p.dir, ["hook"], {
     stdin: hookEvent({ hook_event_name: "WorktreeCreate", name: "task-a" }),

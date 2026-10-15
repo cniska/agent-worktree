@@ -1,14 +1,14 @@
 # agent-worktree Specification
 
-> Task worktrees, so coding agents working in parallel never share a checkout: each task gets its own, set up and torn down by the project's own scripts.
+> Task worktrees, so coding agents working in parallel never share a checkout: each task gets its own, set up and torn down by the project's own commands.
 
 This document states what must hold, not how. [`README.md`](README.md) has the install and the commands, and [`src/README.md`](src/README.md) maps the modules that meet these requirements.
 
-**Status: reverse-engineered from the code at `1904f2c`, with the worktree location the owner decided (§2.1, §2.10).** §9 lists the known gaps and open questions.
+**Status: reverse-engineered from the code at `1904f2c`, with the worktree location (§2.1, §2.10) and the install (§2.8, §2.13) the owner decided.** §9 lists the known gaps and open questions.
 
 ## 1. Purpose & context
 
-Two agents in one checkout overwrite each other's files, so parallel work needs a checkout per task. A bare `git worktree add` gives a checkout that is not ready to work in, and leaves whatever the worktree started outside its directory running when it goes. Claude Code makes worktrees of its own and runs no project setup for them. agent-worktree owns the whole lifecycle: it creates the worktree, runs the project's setup, records whether setup finished, and runs the teardown before the worktree goes. A project's scripts must be idempotent, since each runs again on every resume and retry.
+Two agents in one checkout overwrite each other's files, so parallel work needs a checkout per task. A bare `git worktree add` gives a checkout that is not ready to work in, and leaves whatever the worktree started outside its directory running when it goes. Claude Code makes worktrees of its own and runs no project setup for them. agent-worktree owns the whole lifecycle: it creates the worktree, runs the project's setup, records whether setup finished, and runs the teardown before the worktree goes. A project's setup and teardown commands must be idempotent, since each runs again on every resume and retry.
 
 **Primary user:** the owner's coding agents, through the CLI and the `cniska-worktree` Claude Code plugin, in the owner's git clones. Not the audience: bare repositories, submodules, or checkouts whose git directory lives elsewhere.
 
@@ -36,7 +36,7 @@ Two agents in one checkout overwrite each other's files, so parallel work needs 
 
 - **FR-13** — `create <name>` makes a worktree on branch `<name>`: a new branch from the primary's HEAD, or the existing branch checked out. It registers the worktree, runs setup in it, records setup as finished, and prints the path.
 - **FR-14** — `create` on a worktree whose setup finished prints its path and runs nothing.
-- **FR-15** — A setup script that fails is refused as `setup_failed`; the worktree stays registered with setup pending, and the next `create` reruns setup without making the worktree again.
+- **FR-15** — A setup hook that fails is refused as `setup_failed`; the worktree stays registered with setup pending, and the next `create` reruns setup without making the worktree again.
 - **FR-16** — A directory where the worktree would go that agent-worktree did not register is refused as `unmanaged`, and left as it is.
 - **FR-17** — A registered worktree whose directory is gone is refused as `orphaned`, naming `prune`.
 - **FR-18** — A registered worktree whose directory git does not list as a worktree is refused as `not_a_worktree`.
@@ -66,12 +66,12 @@ Two agents in one checkout overwrite each other's files, so parallel work needs 
 - **FR-30** — `ls` prints one line per registered worktree and per unregistered entry where the project's worktrees live: its name, its state, its branch, its port block (FR-57) and its path, sorted by name.
 - **FR-31** — `ls` with nothing to list prints nothing on stdout and notes `no task worktrees` on stderr.
 
-### 2.8 Project scripts
+### 2.8 Project hooks
 
-- **FR-32** — A project needs no script. `scripts/worktree-setup.sh` runs in the checkout being set up, as that checkout has it; `scripts/worktree-teardown.sh` runs in the primary checkout, since the worktree may already be gone. `scripts/worktree-ports` is not a script: it is read, never run (FR-51).
-- **FR-33** — Both scripts get `WORKTREE_PRIMARY`, `WORKTREE_PATH`, for a task worktree `WORKTREE_NAME`, and for a worktree holding a port block `WORKTREE_PORT` (FR-56). `WORKTREE_PATH` is where the worktree actually is, or where git last listed it when the command started; for a worktree git no longer lists, such as one dropped with `git worktree remove`, it is unset. For the primary, `WORKTREE_NAME` and `WORKTREE_PORT` are unset. A variable left unset stays unset even when the caller's environment set it. Beyond these variables, a script gets the caller's environment, with nothing of agent-worktree's own added, such as the Bun it runs on.
-- **FR-34** — A script that exists but is not executable is refused as `script_not_executable`, and one that cannot start as `script_unrunnable`; neither is skipped.
-- **FR-35** — A script's output goes to stderr and is never read; its exit status alone decides success.
+- **FR-32** — A project needs no hook, and each of its three is optional on its own: `.worktree-hooks/setup`, `.worktree-hooks/teardown` and `.worktree-hooks/ports` at the checkout's root, which `install` writes (FR-62). With no setup hook `create` and `init` run no setup, and with no teardown hook `remove` and `prune` run no teardown. The setup hook runs in the checkout being set up, as that checkout has it; the teardown hook runs in the primary checkout, as the primary has it, since the worktree may already be gone. The ports hook is read, never run (FR-51).
+- **FR-33** — Both hooks get `WORKTREE_PRIMARY`, `WORKTREE_PATH`, for a task worktree `WORKTREE_NAME`, and for a worktree holding a port block `WORKTREE_PORT` (FR-56). `WORKTREE_PATH` is where the worktree actually is, or where git last listed it when the command started; for a worktree git no longer lists, such as one dropped with `git worktree remove`, it is unset. For the primary, `WORKTREE_NAME` and `WORKTREE_PORT` are unset. A variable left unset stays unset even when the caller's environment set it. Beyond these variables, a hook gets the caller's environment, with nothing of agent-worktree's own added, such as the Bun it runs on.
+- **FR-34** — A setup or teardown hook that exists but is not executable is refused as `hook_not_executable`, and one that cannot start as `hook_unrunnable`; neither is skipped.
+- **FR-35** — A hook's output goes to stderr and is never read; its exit status alone decides success.
 
 ### 2.9 Claude Code hook and plugin
 
@@ -99,7 +99,7 @@ Two agents in one checkout overwrite each other's files, so parallel work needs 
 
 ### 2.12 Port blocks
 
-- **FR-51** — A project asks for ports by writing how many each task worktree needs, a whole number N from 1 to 1000, into `scripts/worktree-ports`, which agent-worktree reads in the checkout being set up. Setting up a task worktree of such a project gives it the lowest free block of ⌈N/10⌉ consecutive units, a unit being 10 consecutive ports from 24000 to 24999 that starts at a multiple of 10, and records the block in the ledger; a block is never derived from a hash of the worktree's name or path. The primary checkout gets no block, so it keeps the project's default ports. Claiming a block notes `port block <first>-<last> for <name>` on stderr.
+- **FR-51** — A project asks for ports by installing how many each task worktree needs, a whole number N from 1 to 1000, as its ports hook, which agent-worktree reads in the checkout being set up. Setting up a task worktree of such a project gives it the lowest free block of ⌈N/10⌉ consecutive units, a unit being 10 consecutive ports from 24000 to 24999 that starts at a multiple of 10, and records the block in the ledger; a block is never derived from a hash of the worktree's name or path. The primary checkout gets no block, so it keeps the project's default ports. Claiming a block notes `port block <first>-<last> for <name>` on stderr.
 - **FR-52** — A unit is free when no worktree of any project on the machine holds it and no program listens on any of its ports; a port in use skips its whole unit, and a block is free when each of its units is. A port is in use when a TCP connect to it on `127.0.0.1` or `::1` succeeds, which a listener on `0.0.0.0` or `::` accepts too; agent-worktree never binds a port to probe it. A worktree holds its block until it is unregistered, or until a `prune` or a claim finds it stale (FR-58, FR-59, FR-60).
 - **FR-53** — Two commands claiming at once never get a unit in common, and two setting up one worktree at once agree on one block.
 - **FR-54** — With no free block of the size the project asks for, `create` and `init` first remove the worktrees whose branch landed, as FR-28's `prune` does, sparing the checkout they run in and the worktree they set up, noting `worktree <name> not removed, though its branch landed: <cause>` on stderr for each it could not remove, and claim again; with still none free they are refused as `no_free_ports`, naming `remove`, fixing a teardown that failed for a gone worktree (FR-60), and `prune` in another clone (FR-59); the worktree stays registered with setup pending and no block, and once a block is freed the next `create` or `init` claims one and resumes setup.
@@ -109,7 +109,12 @@ Two agents in one checkout overwrite each other's files, so parallel work needs 
 - **FR-58** — `remove` frees the block when it unregisters the worktree; a worktree left registered after a failed teardown keeps its block, and its teardown during `prune`, or during a claim that takes the block over (FR-60), gets it.
 - **FR-59** — `prune` frees every block whose worktree's ledger entry is gone, in any project on the machine, such as one whose clone was deleted, noting `port block <first>-<last> freed from <entry>, which is gone` on stderr for each.
 - **FR-60** — `create` and `init` take over a stale block on their way to the lowest free one, as `prune` would: a block whose ledger entry is gone, in any project, is freed as FR-59 frees it; a block held by a registered worktree of the same project whose directory is gone has that worktree's teardown run and the worktree unregistered (FR-28), noting `port block <first>-<last> freed from <name>, whose worktree is gone` on stderr. A worktree whose teardown fails stays registered and keeps its block, and the claim moves on to the next block.
-- **FR-61** — A project with no `scripts/worktree-ports` gets no block for any worktree, and its `create` and `init` never meet `no_free_ports`. One whose file holds anything but a whole number from 1 to 1000 on one line is refused as `invalid_ports`, naming the file and what it holds, and so is one whose file cannot be read, such as a directory; the worktree stays registered with setup pending and no block.
+- **FR-61** — A project with no ports hook gets no block for any worktree, and its `create` and `init` never meet `no_free_ports`. One whose ports hook holds anything but a whole number from 1 to 1000 on one line is refused as `invalid_ports`, naming the hook and what it holds, and so is one whose hook cannot be read, such as a directory; the worktree stays registered with setup pending and no block.
+
+### 2.13 install
+
+- **FR-62** — `install [--setup <command>] [--teardown <command>] [--ports <n>]` writes the hook each option names into `.worktree-hooks/` at the root of the checkout it runs in, for the project to commit, prints each hook's path, and leaves every hook no option names as it is, so a reinstall without an option keeps that hook. It never works out a command or a count, and never stages or commits. A setup or teardown hook is plain shell holding the command as the shell assignment `command='<command>'`, a quote in it written `'\''`, which it runs with `sh -ec`; the ports hook holds the number.
+- **FR-63** — `install` with no option, with an empty command, or with a `--ports` that is not a whole number from 1 to 1000 is refused with the usage, and writes nothing.
 
 ## 3. Non-functional requirements
 
@@ -122,10 +127,10 @@ Two agents in one checkout overwrite each other's files, so parallel work needs 
 
 - Moving a worktree between locations; the owner moves one from the earlier location with git (FR-42).
 - Following a primary checkout that moved (FR-4 keys by path; see §9).
-- Working out or writing a project's setup or teardown, and installing anything for the project; the project's `scripts/worktree-setup.sh` and `scripts/worktree-teardown.sh` own that (FR-32).
+- Working out a project's setup, teardown or ports: `install` writes only the commands and the count it is given (FR-62).
 - Worktrees agent-worktree did not create, including Claude Code's own when the plugin is not installed; git, or Claude Code for its own, manages those.
 - Bare repositories, submodules and separate git dirs (FR-11).
-- Reading a script's output (FR-35).
+- Reading a hook's output (FR-35).
 
 ## 5. Acceptance criteria
 
@@ -135,7 +140,7 @@ Two agents in one checkout overwrite each other's files, so parallel work needs 
 - **AC-4** — A registration written under `.git/agent-worktrees` by hand is read as `ready`. (FR-7)
 - **AC-5** — `create` with each invalid name form, with a name differing only in case, and from a submodule, a separate git dir and a non-checkout: `invalid_name`, `case_collision`, `unsupported_layout`, `not_a_checkout`. (FR-9, FR-10, FR-11, FR-12)
 - **AC-6** — `create task-a` on a new and on an existing branch: the worktree on branch `task-a`, setup recorded with its name, path and primary, `ls` reading `ready`; a second `create` runs no setup. (FR-13, FR-14, FR-33)
-- **AC-7** — `create` with a failing setup: `setup_failed` and `pending`; fix the script and rerun: setup reruns in the same worktree and it reads `ready`. (FR-15, NF-2)
+- **AC-7** — `create` with a failing setup: `setup_failed` and `pending`; fix the hook and rerun: setup reruns in the same worktree and it reads `ready`. (FR-15, NF-2)
 - **AC-8** — `create` and `remove` over an unregistered directory, a registered one whose directory is gone, and a registered directory git does not list: `unmanaged` leaving it, `orphaned`, `not_a_worktree`; each converges after its act. (FR-16, FR-17, FR-18, FR-27, NF-2)
 - **AC-9** — `init` in the primary, in a pending task worktree, and in an unregistered worktree: setup without a name even with `WORKTREE_NAME` inherited, setup with the name and `ready`, `not_a_managed_checkout`. (FR-19, FR-20, FR-21, FR-33)
 - **AC-10** — `remove` on a clean worktree in a repo with no remote: teardown ran in the primary, the worktree is gone, the branch kept with the reason, the name unregistered; on a detached one it prints `detached`. (FR-22, FR-32)
@@ -144,8 +149,8 @@ Two agents in one checkout overwrite each other's files, so parallel work needs 
 - **AC-13** — `remove` of an unregistered name: `not_registered`. (FR-27)
 - **AC-14** — `prune` with two gone worktrees, one whose teardown fails: `removals_failed` naming it and the exit, the other unregistered and gone from `git worktree list`; fix and rerun: both gone. (FR-28, FR-29, NF-2)
 - **AC-15** — `ls` over registered and unregistered directories, and over none: lines sorted by name with state, branch and path, or the note on stderr. (FR-30, FR-31)
-- **AC-16** — A non-executable setup script and one with a bad interpreter: `script_not_executable`, `script_unrunnable`. A project with no scripts creates and removes. (FR-32, FR-34)
-- **AC-17** — A setup script that prints to stdout: the CLI's stdout holds only the path. (FR-35, FR-36)
+- **AC-16** — A non-executable setup hook and one with a bad interpreter: `hook_not_executable`, `hook_unrunnable`. A project with no hooks creates and removes. (FR-32, FR-34)
+- **AC-17** — A setup hook that prints to stdout: the CLI's stdout holds only the path. (FR-35, FR-36)
 - **AC-18** — `hook` with a `WorktreeCreate` event: the path alone on stdout; with a `WorktreeRemove` event for a dirty worktree, run from inside it: removed. (FR-36, FR-37)
 - **AC-19** — `hook` with a foreign path, a nested name, another event and non-JSON stdin: `foreign_path`, `invalid_name`, `hook_event`, `hook_input`. (FR-38, FR-39)
 - **AC-20** — The plugin's hooks file runs `agent-worktree hook` for both events and the note on the four session sources. (FR-40)
@@ -157,7 +162,7 @@ Two agents in one checkout overwrite each other's files, so parallel work needs 
 - **AC-26** — Change state on disk between two commands, such as deleting a worktree's directory: the second command reads the change. (NF-1)
 - **AC-27** — The test environment's `HOME` and XDG directories are scratch directories, not the account's. (NF-3)
 - **AC-28** — The whole suite passes with the network unavailable. (NF-4)
-- **AC-29** — `create` through `bin/agent-worktree` with a setup script that records its environment: the caller's environment and the FR-33 variables, nothing else. (FR-33)
+- **AC-29** — `create` through `bin/agent-worktree` with a setup hook that records its environment: the caller's environment and the FR-33 variables, nothing else. (FR-33)
 - **AC-30** — In a project asking for 10 ports, as in AC-31 to AC-39: `create task-a` and `task-b`: setup gets the first two free blocks as `WORKTREE_PORT`, and `ls` shows each as `<first>-<last>`, and `create` notes the block it claims; `init` in the primary with `WORKTREE_PORT` inherited: setup gets it unset. (FR-33, FR-51, FR-56, FR-57)
 - **AC-31** — `remove task-a`: its teardown gets its block, and the next `create` gets that block again. (FR-51, FR-58)
 - **AC-32** — Another program listens on a port of the lowest free block on `0.0.0.0` and on a port of the next on `::`, then `create`: the worktree gets the third block, and each program accepted a connection. (FR-52)
@@ -169,9 +174,11 @@ Two agents in one checkout overwrite each other's files, so parallel work needs 
 - **AC-38** — Delete a worktree's directory, then `create` another: the gone worktree's teardown gets its block, `create` notes the block freed, the new worktree gets it, and `ls` lists only the new one; with a teardown that fails instead: the gone worktree keeps its block and the new one gets the next. (FR-58, FR-60)
 - **AC-39** — A second clone creates a worktree and is deleted, then `create` in the first, with no `prune`: it notes the block freed and gets it. (FR-59, FR-60)
 - **AC-40** — With a local bare repository as `origin`: `remove` of a worktree whose branch was pushed with an upstream and then pushed to `origin`'s `main` past the local `origin/main` deletes the branch and `origin`'s copy; `remove --force` of one with an unpushed commit keeps it, naming `origin/main`; one squash-merged into `main` whose `origin` branch was deleted is deleted, and one with a commit since is kept; `prune` after two worktrees are deleted by hand deletes the merged branch and keeps the unmerged one, noting each; with `origin` pointing at no repository, `remove` keeps the branch, naming why. (FR-22, FR-28, NF-4)
-- **AC-41** — A project with no `scripts/worktree-ports`, with a port held in every free unit: `create` succeeds, `ls` shows `-` and setup gets `WORKTREE_PORT` unset; asking for 20: `create` gives setup the first port of two consecutive free units and `ls` shows `<first>-<first + 19>`; asking for `ten`: `invalid_ports` naming the file, setup pending and `ls` showing `-`. (FR-51, FR-56, FR-61)
+- **AC-41** — A project with no ports hook, with a port held in every free unit: `create` succeeds, `ls` shows `-` and setup gets `WORKTREE_PORT` unset; asking for 20: `create` gives setup the first port of two consecutive free units and `ls` shows `<first>-<first + 19>`; a ports hook holding `ten`: `invalid_ports` naming the hook, setup pending and `ls` showing `-`. (FR-51, FR-56, FR-61)
 - **AC-42** — With a local bare repository as `origin`: `prune` removes a clean worktree whose branch was pushed with an upstream and pushed to `origin`'s `main`, running its teardown and deleting its branch here and on `origin`, noting each; it keeps a worktree never pushed, one with an untracked file, one pushed but not merged, one locked, and the one it runs in. (FR-28)
 - **AC-43** — A project asking for 10 ports with a landed worktree holding the one free block: `create` of another runs the landed one's teardown, removes it and takes its block; when the landed one's teardown leaves a file in it, `create` refuses `no_free_ports`, noting it with git's refusal, and the landed one stays. (FR-54)
+- **AC-44** — `install --setup` with a command holding a quote, `--teardown` and `--ports 20`: it prints the three paths under `.worktree-hooks/`, each holding its command; `create` runs the setup command with the FR-33 variables and a block of two units, and `remove` runs the teardown command; the setup hook run by hand with no agent-worktree on `PATH` runs its command; `install --teardown` with another command: the teardown hook holds it and the setup and ports hooks are unchanged. (FR-32, FR-62)
+- **AC-45** — `install` with no option, with `--setup ""`, and with `--ports 0` and `--ports ten`: exit 2 with the usage, and no `.worktree-hooks/` written. (FR-63)
 
 ## 6. Deliverables
 
@@ -185,7 +192,7 @@ Two agents in one checkout overwrite each other's files, so parallel work needs 
 - **C-1** — TypeScript on Bun, which mise installs.
 - **C-2** — Task checkouts are git worktrees of the primary checkout.
 - **C-3** — The plugin brings neither Bun nor the CLI.
-- **C-4** — A project's scripts are plain shell that run without agent-worktree, needing nothing beyond the directory FR-32 names and the variables FR-33 lists.
+- **C-4** — A project's setup and teardown hooks are plain shell that run without agent-worktree, needing nothing beyond the command `install` wrote into them and the variables FR-33 lists.
 
 ## 8. Open decisions (left to the builder)
 
@@ -199,7 +206,7 @@ Two agents in one checkout overwrite each other's files, so parallel work needs 
 - A worktree in the earlier location is refused, not handled where it is; agent-worktree never moves one itself (FR-42).
 - The `WorktreeRemove` hook removes with force, since Claude Code removes a worktree only when its session is done with it (FR-37).
 - Port blocks start at 24000, below the ephemeral ranges of Linux (from 32768) and macOS (from 49152) and Kubernetes' node ports (30000 to 32767), and apart from a range a project keeps for itself (FR-51).
-- Ports are an add-on: a worktree gets a block only when its project asks for one, and agent-worktree provides the ports and never cares how the project uses them (FR-51, FR-61). The request lives in a file beside the scripts, versioned with the project, not in git config, which a fresh clone lacks, nor in the environment, which is the caller's; it is read before setup runs, since the block must exist by then.
+- Ports are an add-on: a worktree gets a block only when its project asks for one, and agent-worktree provides the ports and never cares how the project uses them (FR-51, FR-61). The request is a hook beside setup and teardown, written by `install` and versioned with the project, not in the environment, which is the caller's; it is read before setup runs, since the block must exist by then.
 - A block is whole units of 10, so a request of N ports takes ⌈N/10⌉ units and keeps one claim per unit, which keeps claims atomic; a project sees only `WORKTREE_PORT` and its own N (FR-51, FR-56).
 - A port is probed by connecting on loopback, never by binding it: binding `0.0.0.0` or `::` can raise the macOS firewall prompt on every `create`, in front of an agent nobody is watching (FR-52).
 - `prune` sweeps only a worktree whose branch has an upstream (FR-28): a branch `create` just made sits at the default branch's tip, so by reachability alone it has landed, and a sweep would tear down a live agent's fresh worktree; a worktree landed without ever being pushed stays until its `remove`. The checkout `prune` or `create` runs in is never swept, so an agent creating a worktree from its own keeps the one it stands in.
@@ -214,10 +221,6 @@ Two agents in one checkout overwrite each other's files, so parallel work needs 
 Known gaps, where the code does not yet meet a requirement:
 
 - **A whitespace `HOME`.** With `XDG_DATA_HOME` unset and `HOME` only spaces, the data directory is under the spaces as a relative path, not under the account's home (FR-3); AC-2's test covers only an unset and an empty `HOME`.
-
-Not proven by a criterion:
-
-- **C-4.** It constrains each project's scripts, which belong to the project; agent-worktree runs them and never reads them.
 
 Open questions:
 

@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import {
   git,
   hookEvent,
+  installHook,
   type Listed,
   ls,
   type Project,
@@ -13,7 +14,6 @@ import {
   refused,
   removeScratch,
   run,
-  script,
   succeeded,
   type World,
   world,
@@ -33,7 +33,7 @@ test("AC-21 a worktree in the earlier location is listed as legacy and refused b
   const w = world();
   const p = project(w);
   const record = join(w.root, "teardown-record");
-  script(w, p.dir, "worktree-teardown.sh", recording(record));
+  installHook(w, p.dir, "teardown", recording(record));
   const old = earlier(w, p, "task-a");
   const target = p.path("task-a");
   const listed: readonly Listed[] = [
@@ -60,7 +60,7 @@ test("AC-22 the keep and drop acts converge a worktree in the earlier location",
   const w = world();
   const p = project(w);
   const record = join(w.root, "teardown-record");
-  script(w, p.dir, "worktree-teardown.sh", recording(record));
+  installHook(w, p.dir, "teardown", recording(record));
   const kept = earlier(w, p, "task-a");
   const target = p.path("task-a");
   mkdirSync(dirname(target), { recursive: true });
@@ -88,7 +88,7 @@ test("AC-23 an unregistered directory in the earlier location is not agent-workt
   const w = world();
   const p = project(w);
   const record = join(w.root, "teardown-record");
-  script(w, p.dir, "worktree-teardown.sh", recording(record));
+  installHook(w, p.dir, "teardown", recording(record));
   const stray = join(p.dir, ".claude", "worktrees", "task-a");
   git(w, p.dir, ["worktree", "add", "-q", stray, "-b", "task-a"]);
   expect(ls(w, p.dir)).toEqual([]);

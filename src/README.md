@@ -11,7 +11,7 @@ Flat, so a module is found by name. A file's prefix is its module: `cli-output.t
 | `cli-contract.ts` | What a command is, and the usage refusal |
 | `cli-output.ts` | Writing result lines to stdout and a refusal to stderr |
 
-Another module reaches a module only through its bare-named file, so `cli`'s parts are its own and no module imports the entry. Only `git` and `scripts` start a process; among the tests here, only `cli.test.ts`, which holds the one CLI runner, and the repo fixtures do. A module makes no error but a `CodedError`, and every `switch` ends in a `default` that calls `unreachable`. [`modules.test.ts`](modules.test.ts) holds each of these.
+Another module reaches a module only through its bare-named file, so `cli`'s parts are its own and no module imports the entry. Only `git` and `hooks` start a process; among the tests here, only `cli.test.ts`, which holds the one CLI runner, and the repo fixtures do. A module makes no error but a `CodedError`, and every `switch` ends in a `default` that calls `unreachable`. [`modules.test.ts`](modules.test.ts) holds each of these.
 
 ## Modules
 
@@ -20,13 +20,13 @@ Another module reaches a module only through its bare-named file, so `cli`'s par
 | `cli` | The `agent-worktree` command line, over the domain below |
 | `worktrees` | The lifecycle: create, init, remove, prune and list, from a worktree's state read fresh each time |
 | `branches` | Settle the branch of a removed worktree against its remote: whether it landed, and deleting it there and here |
-| `hook` | Parse a Claude Code `WorktreeCreate` or `WorktreeRemove` event into a worktree name |
+| `event` | Parse a Claude Code `WorktreeCreate` or `WorktreeRemove` event into a worktree name |
 | `project` | The project a directory belongs to, worktree names, and where a worktree lives: under the data directory, keyed by project, or in the earlier location inside the primary |
 | `paths` | The XDG data directory, read from the environment on every call |
 | `ledger` | The record of registered worktrees and whether their setup finished, under the git common dir, and of which worktree holds which port block, under the data directory for every project on the machine |
 | `ports` | Port blocks: the range of 10-port units a block is made of, and whether another program listens on a unit's ports |
 | `git` | Run git and parse what it prints; the only module that runs git |
-| `scripts` | Find and run the project's setup and teardown scripts, and read how many ports it asks for |
+| `hooks` | Write the project's hooks, find and run its setup and teardown hooks, and read how many ports it asks for |
 | `exit` | How a process ended |
 | `directory` | List a directory that may not exist |
 | `log` | A progress note on stderr |
@@ -36,6 +36,6 @@ Another module reaches a module only through its bare-named file, so `cli`'s par
 
 - `cli-commands.ts` lists the commands and what each calls.
 - `worktrees.ts` holds a worktree's states and the refusal each one meets.
-- `repo.test-support.ts` builds the throwaway repos and fake scripts the tests run against.
+- `repo.test-support.ts` builds the throwaway repos and fake hooks the tests run against.
 - Read a module's `.test.ts` before changing what it exports.
 - `spec.test.ts` ties [`../SPEC.md`](../SPEC.md)'s criteria to the acceptance suite in `../acceptance`, which drives the CLI alone; `syntax.test-support.ts` walks a source file's syntax for it and for `modules.test.ts`.

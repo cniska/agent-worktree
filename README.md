@@ -1,9 +1,9 @@
 # agent-worktree
 
-Task worktrees, so coding agents working in parallel never share a checkout: each task gets its own, set up and torn down by the project's own scripts. agent-worktree never works out, writes or installs what a checkout needs; the project's `scripts/worktree-setup.sh` and `scripts/worktree-teardown.sh` do.
+Task worktrees, so coding agents working in parallel never share a checkout: each task gets its own, set up and torn down by the project's own commands. agent-worktree never works out what a checkout needs: `agent-worktree install` writes the setup and teardown commands and the port count the project gives it into hooks, and agent-worktree runs those.
 
-- `agent-worktree create <name>` makes a git worktree outside the repository, runs the project's setup script in it, and prints its path.
-- `agent-worktree remove <name>` runs the project's teardown script, removes the worktree, and deletes its branch when its remote's default branch has it.
+- `agent-worktree create <name>` makes a git worktree outside the repository, runs the project's setup hook in it, and prints its path.
+- `agent-worktree remove <name>` runs the project's teardown hook, removes the worktree, and deletes its branch when its remote's default branch has it.
 - The `cniska-worktree` Claude Code plugin sends Claude Code's own worktrees through the same commands.
 
 ## Install
@@ -38,28 +38,36 @@ Releases before this one made worktrees at `<primary>/.claude/worktrees/<name>`.
 
 ## Project contract
 
-Any git repository works as it is. A project whose worktrees need more than a checkout adds `scripts/worktree-setup.sh`, `scripts/worktree-teardown.sh`, or both. [`SPEC.md`](SPEC.md) states what each gets and when it runs (§2.8), and everything else that must hold.
+Any git repository works as it is. A project whose worktrees need more than a checkout installs its own commands as hooks, from its primary checkout:
+
+```bash
+agent-worktree install --setup "mise install && pnpm install --frozen-lockfile" --teardown "docker compose down -v" --ports 20
+```
+
+Each option is optional: install writes `.worktree-hooks/setup`, `.worktree-hooks/teardown` and `.worktree-hooks/ports` for the options given, prints their paths, and leaves the hooks it is not given as they are, so a later `install --teardown "<command>"` changes only the teardown. A project with no setup hook gets no setup, one with no teardown hook no teardown, and one with no ports hook no ports. Commit `.worktree-hooks/`; delete a hook to drop it. install never works out a command, and never stages or commits. [`SPEC.md`](SPEC.md) states what each hook gets and when it runs (§2.8), and everything else that must hold.
+
+A setup or teardown hook is plain shell that holds its command as `command='<command>'`, so the command shows in the diff, and runs it with `sh -ec`. Setup runs in the worktree being set up, teardown in the primary checkout, since the worktree may already be gone. Both run on every resume and retry, so a command must be safe to run again.
 
 ### Ports
 
-Ports are an add-on. A project whose worktrees need ports of their own, such as for a stack each worktree runs, writes how many into `scripts/worktree-ports`, one whole number from 1 to 1000:
+Ports are an add-on. A project whose worktrees need ports of their own, such as for a stack each worktree runs, installs how many with `--ports`, one whole number from 1 to 1000, which becomes `.worktree-hooks/ports`:
 
 ```text
 20
 ```
 
-agent-worktree reads that file, never runs it, in the checkout being set up, and a project without one gets no ports and never waits for any. Each task worktree of a project that asks gets its own block, the lowest free one made of enough consecutive 10-port units from 24000 to 24999 to hold the number asked for, and its scripts get the first port as `WORKTREE_PORT`; the project's ports run from there. A block is never worked out from the name, so two worktrees never share one, and a unit where another program already listens is skipped. agent-worktree finds a listener by connecting to the port on `127.0.0.1` and `::1`, which a program listening on every address accepts too; it never binds a port to probe it, since binding `0.0.0.0` or `::` can raise the macOS firewall prompt on every `create`, in front of an agent nobody is watching. Blocks are shared across every clone on the machine; `ls` shows each worktree's, `remove` frees it, and `prune` frees those of worktrees removed some other way, even in a clone since deleted. `create` and `init` take such a block over themselves when they reach it, running a gone worktree's teardown first as `prune` would. With no block free, they first remove the worktrees whose branch landed, as `prune` does, before refusing. The primary checkout gets no block and keeps the project's default ports, so a plain clone, such as CI's, does too. `init` gives a block to a worktree an earlier release made, resizes one whose request changed, and frees one whose project no longer asks.
+agent-worktree reads that hook, never runs it, in the checkout being set up, and a project without one gets no ports and never waits for any. Each task worktree of a project that asks gets its own block, the lowest free one made of enough consecutive 10-port units from 24000 to 24999 to hold the number asked for, and its hooks get the first port as `WORKTREE_PORT`; the project's ports run from there. A block is never worked out from the name, so two worktrees never share one, and a unit where another program already listens is skipped. agent-worktree finds a listener by connecting to the port on `127.0.0.1` and `::1`, which a program listening on every address accepts too; it never binds a port to probe it, since binding `0.0.0.0` or `::` can raise the macOS firewall prompt on every `create`, in front of an agent nobody is watching. Blocks are shared across every clone on the machine; `ls` shows each worktree's, `remove` frees it, and `prune` frees those of worktrees removed some other way, even in a clone since deleted. `create` and `init` take such a block over themselves when they reach it, running a gone worktree's teardown first as `prune` would. With no block free, they first remove the worktrees whose branch landed, as `prune` does, before refusing. The primary checkout gets no block and keeps the project's default ports, so a plain clone, such as CI's, does too. `init` gives a block to a worktree an earlier release made, resizes one whose request changed, and frees one whose project no longer asks.
 
-[`examples/docker-compose`](examples/docker-compose) gives each worktree its own Docker Compose stack on its own ports.
+[`examples/docker-compose`](examples/docker-compose) gives each worktree its own Docker Compose stack on its own ports, with the hooks `install --setup scripts/stack-env.sh --teardown scripts/stack-down.sh --ports 2` wrote.
 
 ### Without the CLI
 
-Run the same scripts by hand from the primary checkout, setting any `WORKTREE_*` variable a script reads (§2.8), with a free port for `WORKTREE_PORT`, and skipping one the project lacks:
+The hooks need nothing of agent-worktree, so a developer without it runs them by hand from the primary checkout, setting any `WORKTREE_*` variable the commands read (§2.8), with a free port for `WORKTREE_PORT`, and skipping a hook the project lacks:
 
 ```bash
 git worktree add ../<name>
-(cd ../<name> && scripts/worktree-setup.sh)
-scripts/worktree-teardown.sh
+(cd ../<name> && .worktree-hooks/setup)
+WORKTREE_NAME=<name> .worktree-hooks/teardown
 git worktree remove ../<name>
 ```
 
@@ -74,6 +82,7 @@ git worktree remove ../<name>
 | `agent-worktree ls` | One line per worktree: name, state, branch, port block, path. |
 | `agent-worktree path <name>` | Print the worktree's path. |
 | `agent-worktree hook` | The plugin's `WorktreeCreate` and `WorktreeRemove` entry: reads the event from stdin. |
+| `agent-worktree install [--setup <command>] [--teardown <command>] [--ports <n>]` | Write the hook each option names into `.worktree-hooks/`, leaving the others as they are, and print each path. |
 
 Results go to stdout. A refusal goes to stderr with the act that resolves it, and exits 1; a usage error exits 2.
 
@@ -98,7 +107,7 @@ bin/agent-worktree create <name>
 ```
 
 - `mise install` sets up the clone as [Install](#install) says, and the `bun install` its postinstall runs calls the `prepare` script, which points `core.hooksPath` at `.githooks/`.
-- `bin/agent-worktree create <name>` makes a task worktree and runs `scripts/worktree-setup.sh` in it, which installs the same way without linking the CLI.
+- `bin/agent-worktree create <name>` makes a task worktree and runs the repository's own `.worktree-hooks/setup` in it, which installs the same way without linking the CLI.
 - `.githooks/` holds the commit-subject, format and no-comments gates.
 
 ### Checks

@@ -19,6 +19,8 @@ const REMOVE_USAGE = "agent-worktree remove [--force] <name>";
 
 const LS_USAGE = "agent-worktree ls";
 
+const INSTALL_USAGE = "agent-worktree install [--setup <command>] [--teardown <command>] [--ports <n>]";
+
 const USAGES = [
   "agent-worktree create <name>",
   "agent-worktree init",
@@ -27,6 +29,7 @@ const USAGES = [
   LS_USAGE,
   "agent-worktree path <name>",
   "agent-worktree hook",
+  INSTALL_USAGE,
 ];
 
 test("AC-24 results, refusals and usage errors exit 0, 1 and 2 with their output", () => {
@@ -46,7 +49,7 @@ test("AC-24 results, refusals and usage errors exit 0, 1 and 2 with their output
   });
   expect(usageRefused(run(w, p.dir, ["task-a"]), null)).toEqual({
     message: "task-a is not an agent-worktree command; agent-worktree with no command lists them",
-    act: "agent-worktree create|init|remove|prune|ls|path|hook",
+    act: "agent-worktree create|init|remove|prune|ls|path|hook|install",
   });
   expect(existsSync(p.path("task-a"))).toBe(false);
   const unknownOption = usageRefused(run(w, p.dir, ["remove", "--bogus", "task-a"]), "remove");

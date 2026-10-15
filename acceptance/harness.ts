@@ -161,23 +161,22 @@ export function bareRemote(w: World, dir: string): string {
   return bare;
 }
 
-export type ScriptName = "worktree-setup.sh" | "worktree-teardown.sh";
+export type HookName = "setup" | "teardown";
 
-export function script(w: World, checkout: string, name: ScriptName, body: string): void {
-  const path = join(checkout, "scripts", name);
-  mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, `#!/bin/sh\n${body}\n`);
-  chmodSync(path, 0o755);
-  git(w, checkout, ["add", `scripts/${name}`]);
-  git(w, checkout, ["commit", "-q", "-m", name]);
+export function installHook(w: World, checkout: string, hook: HookName, body: string): void {
+  succeeded(run(w, checkout, ["install", `--${hook}`, body]));
+  git(w, checkout, ["add", HOOKS]);
+  git(w, checkout, ["commit", "-q", "-m", hook]);
 }
 
+export const HOOKS = ".worktree-hooks";
+
 export function requestPorts(w: World, checkout: string, text: string): void {
-  const path = join(checkout, "scripts", "worktree-ports");
+  const path = join(checkout, HOOKS, "ports");
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, text);
-  git(w, checkout, ["add", "scripts/worktree-ports"]);
-  git(w, checkout, ["commit", "-q", "-m", "worktree-ports"]);
+  git(w, checkout, ["add", HOOKS]);
+  git(w, checkout, ["commit", "-q", "-m", "ports"]);
 }
 
 export function recording(record: string): string {

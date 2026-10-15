@@ -1,7 +1,7 @@
 import { messageOf, refuser } from "./coded-error";
 import { nameAt, type Project, parseName, type WorktreeName } from "./project";
 
-type HookEvent = { readonly event: "WorktreeCreate" | "WorktreeRemove"; readonly name: WorktreeName };
+type Event = { readonly event: "WorktreeCreate" | "WorktreeRemove"; readonly name: WorktreeName };
 
 const refuse = refuser<{
   readonly hook_input: { readonly detail: string };
@@ -23,31 +23,31 @@ const refuse = refuser<{
   },
 });
 
-type HookInput = { readonly [key: string]: unknown };
+type EventInput = { readonly [key: string]: unknown };
 
-function isHookInput(value: unknown): value is HookInput {
+function isEventInput(value: unknown): value is EventInput {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function hookInput(text: string): HookInput {
+function eventInput(text: string): EventInput {
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
   } catch (error) {
     throw refuse("hook_input", { detail: messageOf(error) });
   }
-  if (!isHookInput(parsed)) throw refuse("hook_input", { detail: "the top level is not an object" });
+  if (!isEventInput(parsed)) throw refuse("hook_input", { detail: "the top level is not an object" });
   return parsed;
 }
 
-function field(input: HookInput, name: string): string {
+function field(input: EventInput, name: string): string {
   const value = input[name];
   if (typeof value !== "string") throw refuse("hook_input", { detail: `${name} is not a string` });
   return value;
 }
 
-export function parseHookEvent(project: Project, text: string): HookEvent {
-  const input = hookInput(text);
+export function parseEvent(project: Project, text: string): Event {
+  const input = eventInput(text);
   const event = field(input, "hook_event_name");
   if (event === "WorktreeCreate") return { event, name: parseName(project, field(input, "name")) };
   if (event === "WorktreeRemove") {

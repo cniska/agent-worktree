@@ -2,9 +2,10 @@ import { readFileSync } from "node:fs";
 import { unreachable } from "./assert";
 import { fateText } from "./branches";
 import { type Command, usageRefusal } from "./cli-contract";
-import { parseHookEvent } from "./hook";
+import { parseEvent } from "./event";
+import { install } from "./hooks";
 import { note } from "./log";
-import { blockText } from "./ports";
+import { blockText, PORT_LIMIT, type PortRequest, parsePortRequest } from "./ports";
 import { checkout, type Project, parseName, project, type WorktreeName, worktreePath } from "./project";
 import { create, init, type Listed, list, prune, remove } from "./worktrees";
 
@@ -149,7 +150,7 @@ const hookCommand: Command = {
   async run(positionals) {
     noPositionals(positionals, this);
     const current = checkout(process.cwd());
-    const { event, name } = parseHookEvent(current.project, readFileSync(0, "utf8"));
+    const { event, name } = parseEvent(current.project, readFileSync(0, "utf8"));
     switch (event) {
       case "WorktreeCreate":
         return [await create(current.project, name, current.toplevel)];
@@ -161,6 +162,45 @@ const hookCommand: Command = {
   },
 };
 
+function commandOption(value: unknown, option: string, command: Command): string | null {
+  if (value === undefined) return null;
+  if (typeof value !== "string" || value === "")
+    throw usageRefusal(`agent-worktree install --${option} takes a command, and got none`, command.usage);
+  return value;
+}
+
+function portsOption(value: unknown, command: Command): PortRequest | null {
+  if (value === undefined) return null;
+  const request = typeof value === "string" ? parsePortRequest(value) : null;
+  if (request === null)
+    throw usageRefusal(
+      `agent-worktree install --ports takes a whole number ${PORT_LIMIT}, and got: ${String(value)}`,
+      command.usage,
+    );
+  return request;
+}
+
+const installCommand: Command = {
+  name: "install",
+  usage: "agent-worktree install [--setup <command>] [--teardown <command>] [--ports <n>]",
+  summary: "write the project's setup and teardown commands and port count into its hooks",
+  options: { setup: { type: "string" }, teardown: { type: "string" }, ports: { type: "string" } },
+  async run(positionals, values) {
+    noPositionals(positionals, this);
+    const installed = {
+      setup: commandOption(values.setup, "setup", this),
+      teardown: commandOption(values.teardown, "teardown", this),
+      ports: portsOption(values.ports, this),
+    };
+    if (installed.setup === null && installed.teardown === null && installed.ports === null)
+      throw usageRefusal(
+        "agent-worktree install takes at least one of --setup, --teardown and --ports",
+        this.usage,
+      );
+    return install(checkout(process.cwd()).toplevel, installed);
+  },
+};
+
 export const COMMANDS: readonly Command[] = [
   createCommand,
   initCommand,
@@ -169,4 +209,5 @@ export const COMMANDS: readonly Command[] = [
   lsCommand,
   pathCommand,
   hookCommand,
+  installCommand,
 ];

@@ -22,6 +22,7 @@ import {
   worktreeRemoval,
   worktrees,
 } from "./git";
+import { hookIn, portRequest, runHook } from "./hooks";
 import {
   blockOf,
   claimBlock,
@@ -44,7 +45,6 @@ import {
   worktreePath,
   worktreesDir,
 } from "./project";
-import { portRequest, runScript, SETUP, scriptIn, TEARDOWN } from "./scripts";
 
 type Held = { readonly name: WorktreeName; readonly block: Block | null };
 
@@ -68,12 +68,12 @@ const refuse = refuser<{
   readonly unmanaged: { readonly path: string };
   readonly orphaned: { readonly name: string };
   readonly not_a_worktree: { readonly name: string; readonly path: string };
-  readonly setup_failed: { readonly checkout: string; readonly exit: Exit };
+  readonly setup_failed: { readonly hook: string; readonly checkout: string; readonly exit: Exit };
   readonly not_registered: { readonly name: string; readonly path: string };
   readonly locked: { readonly name: string; readonly path: string };
   readonly dirty: { readonly name: string; readonly path: string };
   readonly submodules: { readonly name: string; readonly path: string };
-  readonly teardown_failed: { readonly name: string; readonly exit: Exit };
+  readonly teardown_failed: { readonly name: string; readonly failed: FailedTeardown };
   readonly removals_failed: { readonly failures: readonly Failure[] };
   readonly not_a_managed_checkout: { readonly checkout: string };
   readonly legacy_location: { readonly name: string; readonly path: string; readonly target: string };
@@ -96,8 +96,8 @@ const refuse = refuser<{
     resolve: () => "remove the directory, then agent-worktree prune",
   },
   setup_failed: {
-    message: ({ checkout, exit }) => `${SETUP} ${describeExit(exit)} in ${checkout}; setup is pending`,
-    resolve: () => "fix what the script reported, then run the command again to resume",
+    message: ({ hook, checkout, exit }) => `${hook} ${describeExit(exit)} in ${checkout}; setup is pending`,
+    resolve: () => "fix what the hook reported, then run the command again to resume",
   },
   not_registered: {
     message: ({ name, path }) => `${name} is not a registered worktree at ${path}`,
@@ -118,9 +118,9 @@ const refuse = refuser<{
     resolve: ({ name }) => `run agent-worktree remove --force ${name}`,
   },
   teardown_failed: {
-    message: ({ name, exit }) => `${TEARDOWN} ${describeExit(exit)} for ${name}; the worktree is kept`,
+    message: ({ name, failed }) => `${teardownCause(failed)} for ${name}; the worktree is kept`,
     resolve: ({ name }) =>
-      `fix what the script reported and run the command again, or run agent-worktree remove --force ${name} to remove the worktree anyway`,
+      `fix what the hook reported and run the command again, or run agent-worktree remove --force ${name} to remove the worktree anyway`,
   },
   removals_failed: {
     message: ({ failures }) =>
@@ -210,7 +210,7 @@ function legacyRefusal(project: Project, name: WorktreeName, worktree: Worktree)
   return refuse("legacy_location", { name, path: worktree.path, target: worktreePath(project, name) });
 }
 
-function reap(project: Project, name: WorktreeName, path: string | null): Exit | null {
+function reap(project: Project, name: WorktreeName, path: string | null): FailedTeardown | null {
   const failure = tearDown(project, name, path);
   if (failure === null) unregister(project, name);
   return failure;
@@ -250,20 +250,22 @@ async function setUp(
   here: string,
 ): Promise<void> {
   const block = name === null ? null : await blockFor(project, name, checkout, here);
-  const script = scriptIn(checkout, SETUP);
-  if (script !== null) {
-    const exit = runScript(script, checkout, { name, path: checkout, primary: project.primary, block });
-    if (!succeeded(exit)) throw refuse("setup_failed", { checkout, exit });
+  const hook = hookIn(checkout, "setup");
+  if (hook !== null) {
+    const exit = runHook(hook, checkout, { name, path: checkout, primary: project.primary, block });
+    if (!succeeded(exit)) throw refuse("setup_failed", { hook, checkout, exit });
   }
   if (name !== null) markReady(project, name);
 }
 
-function tearDown(project: Project, name: WorktreeName, path: string | null): Exit | null {
-  const script = scriptIn(project.primary, TEARDOWN);
-  if (script === null) return null;
+type FailedTeardown = { readonly hook: string; readonly exit: Exit };
+
+function tearDown(project: Project, name: WorktreeName, path: string | null): FailedTeardown | null {
+  const hook = hookIn(project.primary, "teardown");
+  if (hook === null) return null;
   const block = blockOf(project, name);
-  const exit = runScript(script, project.primary, { name, path, primary: project.primary, block });
-  return succeeded(exit) ? null : exit;
+  const exit = runHook(hook, project.primary, { name, path, primary: project.primary, block });
+  return succeeded(exit) ? null : { hook, exit };
 }
 
 function add(project: Project, name: WorktreeName, path: string, snap: Snapshot): void {
@@ -332,7 +334,7 @@ function blocker(worktree: Worktree, force: boolean): Blocker | null {
 }
 
 type Unremoved =
-  | { readonly kind: "teardown_failed"; readonly exit: Exit }
+  | { readonly kind: "teardown_failed"; readonly failed: FailedTeardown }
   | { readonly kind: "git_refused"; readonly refusal: GitRefusal };
 
 function removeAt(
@@ -342,7 +344,7 @@ function removeAt(
   force: boolean,
 ): Unremoved | null {
   const failure = tearDown(project, name, worktree.path);
-  if (failure !== null && !force) return { kind: "teardown_failed", exit: failure };
+  if (failure !== null && !force) return { kind: "teardown_failed", failed: failure };
   const refusal = worktreeRemoval(project.primary, worktree.path, force);
   if (refusal !== null) return { kind: "git_refused", refusal };
   if (failure === null) unregister(project, name);
@@ -357,7 +359,7 @@ export function remove(project: Project, name: WorktreeName, force: boolean): Br
   if (unremoved === null) return settleBranch(project.primary, worktree.branch, remotesOf(project.primary));
   switch (unremoved.kind) {
     case "teardown_failed":
-      throw refuse("teardown_failed", { name, exit: unremoved.exit });
+      throw refuse("teardown_failed", { name, failed: unremoved.failed });
     case "git_refused":
       throw unremoved.refusal;
     default:
@@ -367,14 +369,14 @@ export function remove(project: Project, name: WorktreeName, force: boolean): Br
 
 type Failure = { readonly name: WorktreeName; readonly cause: string };
 
-function teardownCause(exit: Exit): string {
-  return `${TEARDOWN} ${describeExit(exit)}`;
+function teardownCause({ hook, exit }: FailedTeardown): string {
+  return `${hook} ${describeExit(exit)}`;
 }
 
 function causeOf(unremoved: Unremoved): string {
   switch (unremoved.kind) {
     case "teardown_failed":
-      return teardownCause(unremoved.exit);
+      return teardownCause(unremoved.failed);
     case "git_refused":
       return unremoved.refusal.message;
     default:

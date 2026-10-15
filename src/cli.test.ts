@@ -44,7 +44,7 @@ describe("the cli", () => {
     expect(run.status).toBe(2);
     expect(run.stdout).toBe("");
     expect(run.stderr).toBe(
-      "agent-worktree: task-a is not an agent-worktree command; agent-worktree with no command lists them\n  agent-worktree create|init|remove|prune|ls|path|hook\n",
+      "agent-worktree: task-a is not an agent-worktree command; agent-worktree with no command lists them\n  agent-worktree create|init|remove|prune|ls|path|hook|install\n",
     );
     expect(existsSync(path("task-a"))).toBe(false);
   });
