@@ -26,6 +26,7 @@ import {
   freeStaleBlocks,
   markReady,
   register,
+  releaseBlock,
   unregister,
 } from "./ledger";
 import { note } from "./log";
@@ -39,7 +40,7 @@ import {
   worktreePath,
   worktreesDir,
 } from "./project";
-import { runScript, SETUP, scriptIn, TEARDOWN } from "./scripts";
+import { portRequest, runScript, SETUP, scriptIn, TEARDOWN } from "./scripts";
 
 type Held = { readonly name: WorktreeName; readonly block: Block | null };
 
@@ -218,8 +219,15 @@ function reapGone(project: Project, other: WorktreeName): boolean {
   return true;
 }
 
+async function blockFor(project: Project, name: WorktreeName, checkout: string): Promise<Block | null> {
+  const wanted = portRequest(checkout);
+  if (wanted !== null) return claimBlock(project, name, wanted, (other) => reapGone(project, other));
+  releaseBlock(project, name);
+  return null;
+}
+
 async function setUp(project: Project, name: WorktreeName | null, checkout: string): Promise<void> {
-  const block = name === null ? null : await claimBlock(project, name, (other) => reapGone(project, other));
+  const block = name === null ? null : await blockFor(project, name, checkout);
   const script = scriptIn(checkout, SETUP);
   if (script !== null) {
     const exit = runScript(script, checkout, { name, path: checkout, primary: project.primary, block });

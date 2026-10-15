@@ -13,7 +13,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { CodedError } from "./coded-error";
-import { type Block, blocks, isInUse } from "./ports";
+import { type Block, blockOfUnits, isInUse, parseUnit, type Unit, units } from "./ports";
 import { type Project, parseName, type WorktreeName, worktreePath } from "./project";
 
 const scratchDirs: string[] = [];
@@ -111,19 +111,56 @@ export type Fixture = {
   path(raw: string): string;
 };
 
-export async function freeBlocks(): Promise<readonly Block[]> {
-  const inUse = await Promise.all(blocks().map(isInUse));
-  return blocks().filter((_, index) => !inUse[index]);
+export async function freeUnits(): Promise<readonly Unit[]> {
+  const inUse = await Promise.all(units().map(isInUse));
+  return units().filter((_, index) => !inUse[index]);
 }
 
-export async function firstFreeBlock(): Promise<Block> {
-  const [free] = await freeBlocks();
-  if (free === undefined) throw new Error("every port block is in use on this machine");
+export async function firstFreeUnit(): Promise<Unit> {
+  const [free] = await freeUnits();
+  if (free === undefined) throw new Error("every port unit is in use on this machine");
   return free;
 }
 
-export function fixture({ setup, teardown }: { setup?: string; teardown?: string } = {}): Fixture {
+export function unitAt(first: Unit, offset: number): Unit {
+  const unit = parseUnit(String(first + offset * 10));
+  if (unit === null) throw new Error(`no unit ${offset} after ${first}`);
+  return unit;
+}
+
+function runFrom(first: Unit, count: number): readonly Unit[] {
+  return Array.from({ length: count }, (_, offset) => unitAt(first, offset));
+}
+
+export function blockAt(first: Unit, count = 1): Block {
+  const block = blockOfUnits(runFrom(first, count));
+  if (block === null) throw new Error(`no run of ${count} units from ${first}`);
+  return block;
+}
+
+export async function firstFreeRun(count: number): Promise<Unit> {
+  const free = new Set(await freeUnits());
+  const last = units().length - count;
+  const first = units().find(
+    (unit, index) => index <= last && runFrom(unit, count).every((each) => free.has(each)),
+  );
+  if (first === undefined) throw new Error(`no ${count} consecutive port units are free on this machine`);
+  return first;
+}
+
+export function requestPorts(checkout: string, ports: string): void {
+  const path = join(checkout, "scripts", "worktree-ports");
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, ports);
+  git(checkout, ["add", "scripts/worktree-ports"]);
+  git(checkout, ["commit", "-q", "-m", "worktree-ports"]);
+}
+
+type FixtureOptions = { setup?: string; teardown?: string; ports?: number };
+
+export function fixture({ setup, teardown, ports }: FixtureOptions = {}): Fixture {
   const dir = repo();
+  if (ports !== undefined) requestPorts(dir, `${ports}\n`);
   process.env.XDG_DATA_HOME = join(dirname(dir), "data");
   linkScript(dir, "worktree-setup.sh", setup ?? recording(SETUP_RECORD));
   if (teardown !== undefined) linkScript(dir, "worktree-teardown.sh", teardown);

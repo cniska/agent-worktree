@@ -42,30 +42,15 @@ Any git repository works as it is. A project whose worktrees need more than a ch
 
 ### Ports
 
-Each task worktree gets its own block of 10 ports, the lowest free one from 24000 to 24999, and its scripts get the first as `WORKTREE_PORT`; the block runs to `WORKTREE_PORT` + 9. A block is never worked out from the name, so two worktrees never share one, and a block where another program already listens is skipped. agent-worktree finds a listener by connecting to the port on `127.0.0.1` and `::1`, which a program listening on every address accepts too; it never binds a port to probe it, since binding `0.0.0.0` or `::` can raise the macOS firewall prompt on every `create`, in front of an agent nobody is watching. Blocks are shared across every clone on the machine; `ls` shows each worktree's, `remove` frees it, and `prune` frees those of worktrees removed some other way, even in a clone since deleted. `create` and `init` take such a block over themselves when they reach it, running a gone worktree's teardown first as `prune` would. The primary checkout gets no block and keeps the project's default ports, so a plain clone, such as CI's, does too. `init` gives a block to a worktree an earlier release made.
+Ports are an add-on. A project whose worktrees need ports of their own, such as for a stack each worktree runs, writes how many into `scripts/worktree-ports`, one whole number from 1 to 1000:
 
-A project that runs its services with Docker Compose gives each worktree its own stack. The compose file keeps the defaults for the primary, as in `"${WEB_PORT:-3000}:3000"`. `scripts/worktree-setup.sh` writes the worktree's `.env`, which Compose reads:
-
-```sh
-#!/bin/sh
-set -eu
-[ -n "${WORKTREE_NAME:-}" ] || exit 0
-cat > .env <<EOF
-COMPOSE_PROJECT_NAME=$(printf 'myapp-%s' "$WORKTREE_NAME" | tr 'A-Z.' 'a-z_')
-WEB_PORT=$WORKTREE_PORT
-DB_PORT=$((WORKTREE_PORT + 1))
-EOF
+```text
+20
 ```
 
-`scripts/worktree-teardown.sh` removes the stack and its volumes. It runs in the primary checkout, where the worktree's `.env` may already be gone, so it names the stack itself:
+agent-worktree reads that file, never runs it, in the checkout being set up, and a project without one gets no ports and never waits for any. Each task worktree of a project that asks gets its own block, the lowest free one made of enough consecutive 10-port units from 24000 to 24999 to hold the number asked for, and its scripts get the first port as `WORKTREE_PORT`; the project's ports run from there. A block is never worked out from the name, so two worktrees never share one, and a unit where another program already listens is skipped. agent-worktree finds a listener by connecting to the port on `127.0.0.1` and `::1`, which a program listening on every address accepts too; it never binds a port to probe it, since binding `0.0.0.0` or `::` can raise the macOS firewall prompt on every `create`, in front of an agent nobody is watching. Blocks are shared across every clone on the machine; `ls` shows each worktree's, `remove` frees it, and `prune` frees those of worktrees removed some other way, even in a clone since deleted. `create` and `init` take such a block over themselves when they reach it, running a gone worktree's teardown first as `prune` would. The primary checkout gets no block and keeps the project's default ports, so a plain clone, such as CI's, does too. `init` gives a block to a worktree an earlier release made, resizes one whose request changed, and frees one whose project no longer asks.
 
-```sh
-#!/bin/sh
-set -eu
-docker compose --project-name "$(printf 'myapp-%s' "$WORKTREE_NAME" | tr 'A-Z.' 'a-z_')" down -v
-```
-
-Keep `.env` out of git.
+[`examples/docker-compose`](examples/docker-compose) gives each worktree its own Docker Compose stack on its own ports.
 
 ### Without the CLI
 

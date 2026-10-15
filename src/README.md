@@ -23,9 +23,9 @@ Another module reaches a module only through its bare-named file, so `cli`'s par
 | `project` | The project a directory belongs to, worktree names, and where a worktree lives: under the data directory, keyed by project, or in the earlier location inside the primary |
 | `paths` | The XDG data directory, read from the environment on every call |
 | `ledger` | The record of registered worktrees and whether their setup finished, under the git common dir, and of which worktree holds which port block, under the data directory for every project on the machine |
-| `ports` | Port blocks: the range, and whether another program listens on a block's ports |
+| `ports` | Port blocks: the range of 10-port units a block is made of, and whether another program listens on a unit's ports |
 | `git` | Run git and parse what it prints; the only module that runs git |
-| `scripts` | Find and run the project's setup and teardown scripts |
+| `scripts` | Find and run the project's setup and teardown scripts, and read how many ports it asks for |
 | `exit` | How a process ended |
 | `directory` | List a directory that may not exist |
 | `log` | A progress note on stderr |

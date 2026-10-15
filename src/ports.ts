@@ -1,12 +1,22 @@
 import { BUG, faulter, messageOf, systemErrorCode } from "./coded-error";
 
-export type Block = number & { readonly __brand: "Block" };
+export type Unit = number & { readonly __brand: "Unit" };
 
-const BLOCK_WIDTH = 10;
+export type Block = readonly [Unit, ...Unit[]] & { readonly __brand: "Block" };
 
-const FIRST_BLOCK = 24000;
+export type PortRequest = { readonly ports: number; readonly unitCount: number };
 
-const BLOCK_COUNT = 100;
+const UNIT_WIDTH = 10;
+
+const FIRST_UNIT = 24000;
+
+const UNIT_COUNT = 100;
+
+const MAX_PORTS = UNIT_COUNT * UNIT_WIDTH;
+
+export const PORT_LIMIT = `from 1 to ${MAX_PORTS}`;
+
+const PORT_COUNT = /^[1-9]\d*\n?$/;
 
 const PROBED_HOSTS = ["127.0.0.1", "::1"] as const;
 
@@ -24,29 +34,63 @@ const fault = faulter<{
   },
 });
 
-function isBlock(port: number): port is Block {
+function isUnit(port: number): port is Unit {
   return (
     Number.isSafeInteger(port) &&
-    port >= FIRST_BLOCK &&
-    port < FIRST_BLOCK + BLOCK_COUNT * BLOCK_WIDTH &&
-    (port - FIRST_BLOCK) % BLOCK_WIDTH === 0
+    port >= FIRST_UNIT &&
+    port < FIRST_UNIT + MAX_PORTS &&
+    (port - FIRST_UNIT) % UNIT_WIDTH === 0
   );
 }
 
-export function parseBlock(text: string): Block | null {
+export function parseUnit(text: string): Unit | null {
   if (!DIGITS.test(text)) return null;
   const port = Number(text);
-  return isBlock(port) ? port : null;
+  return isUnit(port) ? port : null;
 }
 
-export function blocks(): readonly Block[] {
-  return Array.from({ length: BLOCK_COUNT }, (_, index) => FIRST_BLOCK + index * BLOCK_WIDTH).filter(isBlock);
+export function units(): readonly Unit[] {
+  return Array.from({ length: UNIT_COUNT }, (_, index) => FIRST_UNIT + index * UNIT_WIDTH).filter(isUnit);
 }
 
-export const RANGE = `${FIRST_BLOCK} to ${FIRST_BLOCK + BLOCK_COUNT * BLOCK_WIDTH - 1}`;
+export function parsePortRequest(text: string): PortRequest | null {
+  if (!PORT_COUNT.test(text)) return null;
+  const ports = Number(text.trim());
+  if (!Number.isSafeInteger(ports) || ports > MAX_PORTS) return null;
+  return { ports, unitCount: Math.ceil(ports / UNIT_WIDTH) };
+}
+
+function isBlock(units: readonly Unit[]): units is Block {
+  return units.length > 0 && units.slice(1).every((unit, index) => unit > (units[index] ?? unit));
+}
+
+export function blockOfUnits(held: readonly Unit[]): Block | null {
+  const sorted = [...held].sort((a, b) => a - b);
+  return isBlock(sorted) ? sorted : null;
+}
+
+export function isRunOf(block: Block, unitCount: number): boolean {
+  return block.length === unitCount && block.every((unit, index) => unit === block[0] + index * UNIT_WIDTH);
+}
+
+export const RANGE = `${FIRST_UNIT} to ${FIRST_UNIT + MAX_PORTS - 1}`;
+
+function runText(first: Unit, last: Unit): string {
+  return `${first}-${last + UNIT_WIDTH - 1}`;
+}
 
 export function blockText(block: Block): string {
-  return `${block}-${block + BLOCK_WIDTH - 1}`;
+  const runs: string[] = [];
+  let first = block[0];
+  let last = block[0];
+  for (const unit of block.slice(1)) {
+    if (unit !== last + UNIT_WIDTH) {
+      runs.push(runText(first, last));
+      first = unit;
+    }
+    last = unit;
+  }
+  return [...runs, runText(first, last)].join(",");
 }
 
 async function listenedOn(hostname: string, port: number): Promise<boolean> {
@@ -60,8 +104,8 @@ async function listenedOn(hostname: string, port: number): Promise<boolean> {
   }
 }
 
-export async function isInUse(block: Block): Promise<boolean> {
-  const ports = Array.from({ length: BLOCK_WIDTH }, (_, offset) => block + offset);
+export async function isInUse(unit: Unit): Promise<boolean> {
+  const ports = Array.from({ length: UNIT_WIDTH }, (_, offset) => unit + offset);
   const probes = ports.flatMap((port) => PROBED_HOSTS.map((host) => listenedOn(host, port)));
   return (await Promise.all(probes)).some((listened) => listened);
 }

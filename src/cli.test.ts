@@ -2,7 +2,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { existsSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { firstFreeBlock, fixture, hookEvent, removeScratchDirs, repo, scratchDir } from "./repo.test-support";
+import { firstFreeUnit, fixture, hookEvent, removeScratchDirs, repo, scratchDir } from "./repo.test-support";
 
 const CLI = resolve(import.meta.dir, "cli.ts");
 
@@ -89,8 +89,8 @@ describe("the cli", () => {
   });
 
   test("hook reads a WorktreeCreate event from stdin and prints only the path", async () => {
-    const { dir, path } = fixture();
-    const first = await firstFreeBlock();
+    const { dir, path } = fixture({ ports: 10 });
+    const first = await firstFreeUnit();
     const run = cli(dir, ["hook"], hookEvent({ hook_event_name: "WorktreeCreate", name: "task-a" }));
     expect(run.status).toBe(0);
     expect(run.stdout).toBe(`${path("task-a")}\n`);

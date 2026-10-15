@@ -1,0 +1,11 @@
+services:
+  web:
+    image: nginx:1.27
+    ports:
+      - "${WEB_PORT:-3000}:80"
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_PASSWORD: example
+    ports:
+      - "${DB_PORT:-5432}:5432"

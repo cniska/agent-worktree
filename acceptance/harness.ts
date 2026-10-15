@@ -172,6 +172,14 @@ export function script(w: World, checkout: string, name: ScriptName, body: strin
   git(w, checkout, ["commit", "-q", "-m", name]);
 }
 
+export function requestPorts(w: World, checkout: string, text: string): void {
+  const path = join(checkout, "scripts", "worktree-ports");
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, text);
+  git(w, checkout, ["add", "scripts/worktree-ports"]);
+  git(w, checkout, ["commit", "-q", "-m", "worktree-ports"]);
+}
+
 export function recording(record: string): string {
   return `printf '%s\\t%s\\t%s\\t%s\\n' "\${WORKTREE_NAME-unset}" "\${WORKTREE_PATH-unset}" "$WORKTREE_PRIMARY" "$(pwd -P)" >> "${record}"`;
 }
@@ -287,11 +295,11 @@ export function lsPorts(w: World, dir: string): Readonly<Record<string, string>>
   return Object.fromEntries(listed(w, dir).map(({ name, ports }) => [name, ports]));
 }
 
-const FIRST_BLOCK = 24000;
+const FIRST_UNIT = 24000;
 
-const BLOCK_WIDTH = 10;
+const UNIT_WIDTH = 10;
 
-const BLOCK_COUNT = 100;
+const UNIT_COUNT = 100;
 
 async function listenedOn(hostname: string, port: number): Promise<boolean> {
   try {
@@ -302,28 +310,37 @@ async function listenedOn(hostname: string, port: number): Promise<boolean> {
   }
 }
 
-async function blockInUse(block: number): Promise<boolean> {
-  const ports = Array.from({ length: BLOCK_WIDTH }, (_, offset) => block + offset);
+async function unitInUse(unit: number): Promise<boolean> {
+  const ports = Array.from({ length: UNIT_WIDTH }, (_, offset) => unit + offset);
   const probes = ports.flatMap((port) => ["127.0.0.1", "::1"].map((host) => listenedOn(host, port)));
   return (await Promise.all(probes)).some((listened) => listened);
 }
 
-type FreeBlocks = readonly [number, number, number, ...number[]];
+type FreeUnits = readonly [number, number, number, ...number[]];
 
-function atLeastThree(blocks: readonly number[]): blocks is FreeBlocks {
-  return blocks.length >= 3;
+function atLeastThree(units: readonly number[]): units is FreeUnits {
+  return units.length >= 3;
 }
 
-export async function freeBlocks(): Promise<FreeBlocks> {
-  const all = Array.from({ length: BLOCK_COUNT }, (_, index) => FIRST_BLOCK + index * BLOCK_WIDTH);
-  const inUse = await Promise.all(all.map(blockInUse));
+export async function freeUnits(): Promise<FreeUnits> {
+  const all = Array.from({ length: UNIT_COUNT }, (_, index) => FIRST_UNIT + index * UNIT_WIDTH);
+  const inUse = await Promise.all(all.map(unitInUse));
   const free = all.filter((_, index) => !inUse[index]);
-  if (!atLeastThree(free)) throw new Error("fewer than three port blocks are free on this machine");
+  if (!atLeastThree(free)) throw new Error("fewer than three port units are free on this machine");
   return free;
 }
 
-export function blockText(block: number): string {
-  return `${block}-${block + BLOCK_WIDTH - 1}`;
+export function firstRun(free: readonly number[], count: number): number {
+  const taken = new Set(free);
+  const first = free.find((unit) =>
+    Array.from({ length: count }, (_, offset) => unit + offset * UNIT_WIDTH).every((each) => taken.has(each)),
+  );
+  if (first === undefined) throw new Error(`no ${count} consecutive port units are free on this machine`);
+  return first;
+}
+
+export function blockText(block: number, ports = UNIT_WIDTH): string {
+  return `${block}-${block + ports - 1}`;
 }
 
 export type Address = { readonly hostname: string; readonly port: number };

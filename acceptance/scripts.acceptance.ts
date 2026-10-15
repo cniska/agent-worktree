@@ -2,12 +2,13 @@ import { afterEach, expect, test } from "bun:test";
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import {
-  freeBlocks,
+  freeUnits,
   git,
   launch,
   project,
   refused,
   removeScratch,
+  requestPorts,
   run,
   script,
   succeeded,
@@ -64,7 +65,8 @@ test("AC-29 a script run through the launcher gets the caller's environment and 
   const record = join(w.root, "env.json");
   const dump = `require("node:fs").writeFileSync(${JSON.stringify(record)}, JSON.stringify(process.env))`;
   script(w, p.dir, "worktree-setup.sh", `exec "${process.execPath}" -e '${dump}'`);
-  const [block] = await freeBlocks();
+  requestPorts(w, p.dir, "10\n");
+  const [block] = await freeUnits();
   const launched = launch(w, p.dir, ["create", "task-a"]);
   expect(succeeded(launched)).toEqual([p.path("task-a")]);
   const received = Object.entries(JSON.parse(readFileSync(record, "utf8")));
