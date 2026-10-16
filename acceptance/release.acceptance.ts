@@ -1,14 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import {
-  chmodSync,
-  cpSync,
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  symlinkSync,
-  writeFileSync,
-} from "node:fs";
+import { chmodSync, cpSync, existsSync, mkdirSync, readdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { version } from "../package.json";
 import {
@@ -45,6 +36,14 @@ function installing(w: World, home: string, curl: string): Ran {
     PATH: `${curl}:${SYSTEM_PATH}`,
     SHELL: "/bin/zsh",
   });
+}
+
+function unameSaying(dir: string, system: string, machine: string): string {
+  const uname = join(dir, "uname");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(uname, `#!/bin/sh\ncase "$1" in -s) echo '${system}' ;; -m) echo '${machine}' ;; esac\n`);
+  chmodSync(uname, 0o755);
+  return dir;
 }
 
 function fakeBuild(dir: string, printed: string): string {
@@ -129,7 +128,7 @@ test(
 );
 
 test(
-  "AC-50 the npm package runs its platform's binary, and refuses on another platform and when the platform package is missing or cannot start",
+  "AC-50 the npm package runs its platform's binary with no runtime on PATH, and refuses on another platform and when the platform package is missing or cannot start",
   () => {
     const w = world();
     const assets = releaseAssets(join(w.root, "assets"), compiledBinary(join(w.root, "build")), TARGET);
@@ -146,26 +145,23 @@ test(
     cpSync(join(tree, "agent-worktree"), join(modules, "agent-worktree"), { recursive: true });
     const bin = join(w.root, "prefix", "bin");
     mkdirSync(bin);
-    symlinkSync(join(modules, "agent-worktree", "bin", "agent-worktree.cjs"), join(bin, "agent-worktree"));
-    const path = `${bin}:${toolsOnly(w, ["node", "git"])}`;
+    symlinkSync(join(modules, "agent-worktree", "bin", "agent-worktree"), join(bin, "agent-worktree"));
+    const path = `${bin}:${toolsOnly(w, ["git"])}:${SYSTEM_PATH}`;
     const p = project(w);
+    for (const runtime of ["node", "bun"])
+      expect(
+        runProgram(w, p.dir, ["/bin/sh", "-c", `command -v ${runtime}`], { PATH: path }).exitCode,
+      ).not.toBe(0);
     const platformPackage = `@cniska/agent-worktree-${TARGET}`;
 
-    const manifest = join(modules, "agent-worktree", "package.json");
-    const shipped = readFileSync(manifest, "utf8");
-    writeFileSync(
-      manifest,
-      JSON.stringify({
-        ...JSON.parse(shipped),
-        optionalDependencies: { "@cniska/agent-worktree-plan9-mips": "9.9.9" },
-      }),
-    );
-    expect(runOnPath(w, p.dir, path, ["--version"])).toEqual({
+    expect(
+      runOnPath(w, p.dir, `${unameSaying(join(w.root, "plan9"), "Plan9", "mips")}:${path}`, ["--version"]),
+    ).toEqual({
       exitCode: 1,
       stdout: "",
-      stderr: `agent-worktree: agent-worktree ships no build for ${TARGET}, only @cniska/agent-worktree-plan9-mips\n  build agent-worktree from source with Bun, as its README says\n`,
+      stderr:
+        "agent-worktree: agent-worktree ships no build for Plan9-mips, only darwin-arm64 and linux-x64\n  build agent-worktree from source with Bun, as its README says\n",
     });
-    writeFileSync(manifest, shipped);
 
     expect(runOnPath(w, p.dir, path, ["--version"])).toEqual({
       exitCode: 1,
@@ -173,13 +169,15 @@ test(
       stderr: `agent-worktree: ${platformPackage} is not installed beside @cniska/agent-worktree\n  reinstall @cniska/agent-worktree with optional dependencies enabled\n`,
     });
 
-    cpSync(join(tree, TARGET), join(modules, `agent-worktree-${TARGET}`), { recursive: true });
-    const platformBinary = join(modules, `agent-worktree-${TARGET}`, "agent-worktree");
+    const nested = join(modules, "agent-worktree", "node_modules", "@cniska", `agent-worktree-${TARGET}`);
+    cpSync(join(tree, TARGET), nested, { recursive: true });
+    const platformBinary = join(nested, "agent-worktree");
     chmodSync(platformBinary, 0o644);
     const unstartable = runOnPath(w, p.dir, path, ["--version"]);
     expect([unstartable.exitCode, unstartable.stdout]).toEqual([1, ""]);
-    expect(unstartable.stderr).toStartWith(`agent-worktree: ${platformBinary} could not start: `);
-    expect(unstartable.stderr).toEndWith("\n  reinstall @cniska/agent-worktree\n");
+    expect(unstartable.stderr).toBe(
+      `agent-worktree: ${join(modules, "agent-worktree", "bin")}/../node_modules/${platformPackage}/agent-worktree is not executable\n  reinstall @cniska/agent-worktree\n`,
+    );
     chmodSync(platformBinary, 0o755);
 
     expect(runOnPath(w, p.dir, path, ["--version"])).toEqual({

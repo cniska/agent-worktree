@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { chmodSync, copyFileSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { version } from "../package.json";
 
@@ -14,6 +14,8 @@ const SCOPE = "@cniska";
 const NAME = "agent-worktree";
 const REPOSITORY = { type: "git", url: "git+https://github.com/cniska/agent-worktree.git" } as const;
 const HOMEPAGE = "https://github.com/cniska/agent-worktree";
+const LAUNCHER = join(import.meta.dir, "..", "npm", NAME);
+const BUILDS_TOKEN = "__BUILDS__";
 const SUMMARY =
   "Task worktrees, so coding agents working in parallel never share a checkout: each task gets its own, set up and torn down by the project's own commands.";
 
@@ -47,13 +49,16 @@ export function shimManifest(version: string, platforms: readonly Platform[]): R
     repository: REPOSITORY,
     bugs: { url: `${HOMEPAGE}/issues` },
     keywords: ["agent", "claude-code", "git", "worktree", "cli"],
-    bin: { [NAME]: `bin/${NAME}.cjs` },
-    files: [`bin/${NAME}.cjs`],
-    engines: { node: ">=20" },
+    bin: { [NAME]: `bin/${NAME}` },
+    files: [`bin/${NAME}`],
     optionalDependencies: Object.fromEntries(
       platforms.map((platform) => [platformPackage(platform), version]),
     ),
   };
+}
+
+export function launcher(platforms: readonly Platform[]): string {
+  return readFileSync(LAUNCHER, "utf8").replace(BUILDS_TOKEN, platforms.map(platformTarget).join(" "));
 }
 
 function writeJson(path: string, value: unknown): void {
@@ -77,10 +82,10 @@ function buildTree(artifactsDir: string, outDir: string): void {
   const shim = join(outDir, NAME);
   mkdirSync(join(shim, "bin"), { recursive: true });
   writeJson(join(shim, "package.json"), shimManifest(version, PLATFORMS));
-  copyFileSync(join(root, "npm", `${NAME}.cjs`), join(shim, "bin", `${NAME}.cjs`));
+  writeFileSync(join(shim, "bin", NAME), launcher(PLATFORMS));
+  chmodSync(join(shim, "bin", NAME), 0o755);
   copyFileSync(join(root, "README.md"), join(shim, "README.md"));
   copyFileSync(join(root, "LICENSE"), join(shim, "LICENSE"));
-  chmodSync(join(shim, "bin", `${NAME}.cjs`), 0o755);
 }
 
 if (import.meta.main) {

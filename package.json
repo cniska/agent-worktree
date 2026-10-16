@@ -8,8 +8,8 @@
     "agent-worktree": "./bin/agent-worktree"
   },
   "scripts": {
-    "format": "bunx biome check --write src acceptance scripts npm",
-    "lint": "bunx biome check --error-on-warnings src acceptance scripts npm",
+    "format": "bunx biome check --write src acceptance scripts",
+    "lint": "bunx biome check --error-on-warnings src acceptance scripts",
     "typecheck": "bunx tsc --noEmit",
     "test": "bun test",
     "acceptance": "bun test --timeout 20000 ./acceptance/*.acceptance.ts",

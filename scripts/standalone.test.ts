@@ -82,7 +82,7 @@ describe("the repo stands alone", () => {
   test("guards the release paths and the workflows it owns, but not itself or a workflow another tool installs", () => {
     const paths = guardedFiles().map(({ path }) => path);
     expect(paths).toContain("scripts/install.sh");
-    expect(paths).toContain("npm/agent-worktree.cjs");
+    expect(paths).toContain("npm/agent-worktree");
     expect(paths).toContain("docs/releasing.md");
     expect(paths).toContain(".github/workflows/release.yml");
     expect(paths).toContain(".github/workflows/check.yml");
