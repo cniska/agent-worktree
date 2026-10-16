@@ -96,7 +96,7 @@ const removeCommand: Command = {
   name: "remove",
   usage: "agent-worktree remove [--force] <name>",
   summary:
-    "run teardown and remove the worktree, deleting its branch when its remote's default branch has it",
+    "run teardown and remove the worktree; once its remote's default branch has the branch, delete it locally and, when it was pushed with an upstream, on that remote, keeping both copies when the upstream holds a commit the branch lacks",
   options: { force: { type: "boolean" } },
   async run(positionals, values) {
     const target = namedTarget(positionals, this);

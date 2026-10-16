@@ -3,7 +3,7 @@
 Task worktrees, so coding agents working in parallel never share a checkout: each task gets its own, set up and torn down by the project's own commands. agent-worktree never works out what a checkout needs: `agent-worktree install` writes the setup and teardown commands and the port count the project gives it into hooks, and agent-worktree runs those.
 
 - `agent-worktree create <name>` makes a git worktree outside the repository, runs the project's setup hook in it, and prints its path.
-- `agent-worktree remove <name>` runs the project's teardown hook, removes the worktree, and deletes its branch when its remote's default branch has it.
+- `agent-worktree remove <name>` runs the project's teardown hook, removes the worktree, and once its remote's default branch has the branch, deletes it locally and, when it was pushed with an upstream, on that remote. When the upstream holds a commit the branch lacks, it keeps both copies.
 - The `cniska-worktree` Claude Code plugin sends Claude Code's own worktrees through the same commands.
 
 ## Install
