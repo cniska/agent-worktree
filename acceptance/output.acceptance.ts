@@ -28,7 +28,7 @@ const INSTALL_USAGE =
   "agent-worktree install [--local] [--setup <command>] [--teardown <command>] [--ports <n>]";
 
 const USAGES = [
-  "agent-worktree create <name>",
+  "agent-worktree create [--from <ref>] <name>",
   "agent-worktree init",
   REMOVE_USAGE,
   "agent-worktree prune",

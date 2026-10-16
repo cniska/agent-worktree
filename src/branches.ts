@@ -1,11 +1,11 @@
 import { unreachable } from "./assert";
 import {
   branchTip,
+  commitOf,
   deleteBranchAt,
   deleteRef,
   deleteRemoteBranch,
   fetchBranch,
-  hasCommit,
   hasRemote,
   isAncestor,
   isSquashLanded,
@@ -91,6 +91,28 @@ export function remotesOf(repo: string, timeoutMs = NETWORK_TIMEOUT_MS): Remotes
   return { view, deleteBranch: (target) => deleteRemoteBranch(repo, target, timeoutMs) };
 }
 
+export type CutBase =
+  | { readonly kind: "default"; readonly base: string }
+  | { readonly kind: "head"; readonly reason: "no_remote" | "no_default_branch"; readonly remote: string }
+  | { readonly kind: "unreachable"; readonly remote: string; readonly detail: string };
+
+export function cutBase(remotes: Remotes): CutBase {
+  const remote = DEFAULT_REMOTE;
+  const view = remotes.view(remote);
+  switch (view.kind) {
+    case "absent":
+      return { kind: "head", reason: "no_remote", remote };
+    case "no_default_branch":
+      return { kind: "head", reason: "no_default_branch", remote };
+    case "remote_unreachable":
+      return { kind: "unreachable", remote, detail: view.detail };
+    case "reached":
+      return { kind: "default", base: view.into };
+    default:
+      return unreachable(view);
+  }
+}
+
 function landingOf(repo: string, tip: string, into: string, upstreamGone: boolean): Landing | null {
   if (isAncestor(repo, tip, into)) return "merged";
   if (upstreamGone && isSquashLanded(repo, tip, into)) return "squash-merged";
@@ -113,7 +135,8 @@ function upstreamPlan(
   const tracking = trackingRef(upstream.remote, upstream.ref);
   const remoteTip = heads.get(upstream.ref);
   if (remoteTip === undefined) return { kind: "gone", tracking };
-  if (!hasCommit(repo, remoteTip) || !isAncestor(repo, remoteTip, tip)) return { kind: "ahead", tracking };
+  if (commitOf(repo, remoteTip) === null || !isAncestor(repo, remoteTip, tip))
+    return { kind: "ahead", tracking };
   return { kind: "delete", tracking, target: { remote: upstream.remote, ref: upstream.ref, tip: remoteTip } };
 }
 

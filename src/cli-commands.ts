@@ -68,14 +68,23 @@ function listedLine({ path, state }: Listed): string {
   return [state.name, stateText(state), branchText(state), portsText(state), path].join("\t");
 }
 
+function fromOption(value: unknown, command: Command): string | null {
+  if (value === undefined) return null;
+  if (typeof value !== "string" || value === "")
+    throw usageRefusal(`agent-worktree ${command.name} --from takes a ref, and got none`, command.usage);
+  return value;
+}
+
 const createCommand: Command = {
   name: "create",
-  usage: "agent-worktree create <name>",
-  summary: "create the worktree, run setup and print its path; rerun to resume a failed setup",
-  options: {},
-  async run(positionals) {
+  usage: "agent-worktree create [--from <ref>] <name>",
+  summary:
+    "create the worktree, on a new branch cut from its remote's default branch as fetched now or from --from, run setup and print its path; rerun to resume a failed setup",
+  options: { from: { type: "string" } },
+  async run(positionals, values) {
+    const from = fromOption(values.from, this);
     const target = namedTarget(positionals, this);
-    return [await create(target.project, target.name, checkout(process.cwd()).toplevel)];
+    return [await create(target.project, target.name, { here: checkout(process.cwd()).toplevel, from })];
   },
 };
 
@@ -153,7 +162,7 @@ const hookCommand: Command = {
     const { event, name } = parseEvent(current.project, readFileSync(0, "utf8"));
     switch (event) {
       case "WorktreeCreate":
-        return [await create(current.project, name, current.toplevel)];
+        return [await create(current.project, name, { here: current.toplevel, from: null })];
       case "WorktreeRemove":
         return [fateText(remove(current.project, name, true))];
       default:

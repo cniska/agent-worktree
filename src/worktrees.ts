@@ -3,6 +3,8 @@ import { dirname } from "node:path";
 import { invariant, unreachable } from "./assert";
 import {
   type BranchFate,
+  type CutBase,
+  cutBase,
   fateText,
   hasPushedAndLanded,
   type Remotes,
@@ -13,7 +15,10 @@ import { refuser } from "./coded-error";
 import { directoryEntries } from "./directory";
 import { describeExit, type Exit, succeeded } from "./exit";
 import {
-  addWorktree,
+  branchExists,
+  checkoutWorktree,
+  commitOf,
+  cutWorktree,
   type GitRefusal,
   hasSubmodules,
   isDirty,
@@ -77,6 +82,9 @@ const refuse = refuser<{
   readonly removals_failed: { readonly failures: readonly Failure[] };
   readonly not_a_managed_checkout: { readonly checkout: string };
   readonly legacy_location: { readonly name: string; readonly path: string; readonly target: string };
+  readonly branch_exists: { readonly name: string; readonly from: string };
+  readonly unknown_ref: { readonly ref: string; readonly checkout: string };
+  readonly remote_unreachable: { readonly name: string; readonly remote: string; readonly detail: string };
 }>({
   case_collision: {
     message: ({ name, existing }) => `${name} differs only in case from the existing ${existing}`,
@@ -136,6 +144,19 @@ const refuse = refuser<{
       `${name} is at ${path}, inside the primary checkout, where agent-worktree no longer keeps worktrees`,
     resolve: ({ path, target }) =>
       `keep it with mkdir -p ${dirname(target)} && git worktree move ${path} ${target}, then agent-worktree init in ${target}; or drop it with git worktree remove ${path}, then agent-worktree prune`,
+  },
+  branch_exists: {
+    message: ({ name, from }) => `--from ${from} would cut ${name}, but branch ${name} already exists`,
+    resolve: () => "drop --from to check out the existing branch, or pick another name",
+  },
+  unknown_ref: {
+    message: ({ ref, checkout }) => `${ref} names no commit in ${checkout}`,
+    resolve: () => "name a branch, tag or commit that exists there, and run the command again",
+  },
+  remote_unreachable: {
+    message: ({ name, remote, detail }) => `${remote} could not be reached to cut ${name}: ${detail}`,
+    resolve: ({ name, remote }) =>
+      `run the command again once ${remote} can be reached, or run agent-worktree create --from HEAD ${name} to cut from the HEAD of the checkout it runs in`,
   },
 });
 
@@ -224,11 +245,13 @@ function reapGone(project: Project, other: WorktreeName): boolean {
   return true;
 }
 
+type Run = { readonly here: string; readonly remotes: Remotes };
+
 async function blockFor(
   project: Project,
   name: WorktreeName,
   checkout: string,
-  here: string,
+  { here, remotes }: Run,
 ): Promise<Block | null> {
   const wanted = portRequest(project, checkout);
   if (wanted !== null)
@@ -237,19 +260,14 @@ async function blockFor(
       name,
       wanted,
       (other) => reapGone(project, other),
-      () => sweptBeforeClaim(project, new Set([here, checkout])),
+      () => sweptBeforeClaim(project, new Set([here, checkout]), remotes),
     );
   releaseBlock(project, name);
   return null;
 }
 
-async function setUp(
-  project: Project,
-  name: WorktreeName | null,
-  checkout: string,
-  here: string,
-): Promise<void> {
-  const block = name === null ? null : await blockFor(project, name, checkout, here);
+async function setUp(project: Project, name: WorktreeName | null, checkout: string, run: Run): Promise<void> {
+  const block = name === null ? null : await blockFor(project, name, checkout, run);
   const hook = hookIn(project, checkout, "setup");
   if (hook !== null) {
     const exit = runHook(hook, checkout, { name, path: checkout, primary: project.primary, block });
@@ -268,19 +286,66 @@ function tearDown(project: Project, name: WorktreeName, path: string | null): Fa
   return succeeded(exit) ? null : { hook, exit };
 }
 
-function add(project: Project, name: WorktreeName, path: string, snap: Snapshot): void {
+function headReason(cut: Extract<CutBase, { readonly kind: "head" }>): string {
+  switch (cut.reason) {
+    case "no_remote":
+      return `no remote ${cut.remote}`;
+    case "no_default_branch":
+      return `${cut.remote} has no default branch`;
+    default:
+      return unreachable(cut.reason);
+  }
+}
+
+const PRIMARY_HEAD = "HEAD";
+
+export type CreateRequest = { readonly here: string; readonly from: string | null };
+
+type Creation = Run & CreateRequest;
+
+function baseOf(name: WorktreeName, { here, from, remotes }: Creation): string {
+  if (from !== null) {
+    const commit = commitOf(here, from);
+    if (commit === null) throw refuse("unknown_ref", { ref: from, checkout: here });
+    return commit;
+  }
+  const cut = cutBase(remotes);
+  switch (cut.kind) {
+    case "default":
+      return cut.base;
+    case "head":
+      note(`branch ${name} cut from HEAD, ${headReason(cut)}`);
+      return PRIMARY_HEAD;
+    case "unreachable":
+      throw refuse("remote_unreachable", { name, remote: cut.remote, detail: cut.detail });
+    default:
+      return unreachable(cut);
+  }
+}
+
+function add(project: Project, name: WorktreeName, path: string, snap: Snapshot, creation: Creation): void {
   const existing = caseCollision(name, knownNames(snap));
   if (existing !== null) throw refuse("case_collision", { name, existing });
-  addWorktree(project.primary, path, name);
+  const { from } = creation;
+  if (!branchExists(project.primary, name)) cutWorktree(project.primary, path, name, baseOf(name, creation));
+  else if (from !== null) throw refuse("branch_exists", { name, from });
+  else checkoutWorktree(project.primary, path, name);
   register(project, name);
 }
 
-export async function create(project: Project, name: WorktreeName, here: string): Promise<string> {
+function ignoredFrom(name: WorktreeName, from: string | null): void {
+  if (from !== null) note(`worktree ${name} exists, so --from ${from} is ignored`);
+}
+
+export async function create(project: Project, name: WorktreeName, request: CreateRequest): Promise<string> {
   const path = worktreePath(project, name);
   const snap = snapshot(project);
   const state = stateIn(snap, project, name);
+  const creation: Creation = { ...request, remotes: remotesOf(project.primary) };
+  const { from } = request;
   switch (state.kind) {
     case "ready":
+      ignoredFrom(name, from);
       return path;
     case "unmanaged":
       throw refuse("unmanaged", { path });
@@ -291,14 +356,15 @@ export async function create(project: Project, name: WorktreeName, here: string)
     case "legacy":
       throw legacyRefusal(project, name, state.worktree);
     case "absent":
-      add(project, name, path, snap);
+      add(project, name, path, snap, creation);
       break;
     case "pending":
+      ignoredFrom(name, from);
       break;
     default:
       return unreachable(state);
   }
-  await setUp(project, name, path, here);
+  await setUp(project, name, path, creation);
   return path;
 }
 
@@ -415,8 +481,8 @@ function sweepLanded(project: Project, spared: ReadonlySet<string>, remotes: Rem
   return { removed, failures };
 }
 
-function sweptBeforeClaim(project: Project, spared: ReadonlySet<string>): boolean {
-  const swept = sweepLanded(project, spared, remotesOf(project.primary));
+function sweptBeforeClaim(project: Project, spared: ReadonlySet<string>, remotes: Remotes): boolean {
+  const swept = sweepLanded(project, spared, remotes);
   for (const { name, cause } of swept.failures)
     note(`worktree ${name} not removed, though its branch landed: ${cause}`);
   return swept.removed > 0;
@@ -489,5 +555,8 @@ function managedName(project: Project, checkout: string): WorktreeName | null {
 }
 
 export async function init(project: Project, checkout: string): Promise<void> {
-  await setUp(project, managedName(project, checkout), checkout, checkout);
+  await setUp(project, managedName(project, checkout), checkout, {
+    here: checkout,
+    remotes: remotesOf(project.primary),
+  });
 }

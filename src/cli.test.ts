@@ -26,7 +26,7 @@ describe("the cli", () => {
     const bare = cli(dir, []);
     expect(bare.status).toBe(0);
     expect(bare.stderr).toBe("");
-    expect(bare.stdout).toContain("agent-worktree create <name>");
+    expect(bare.stdout).toContain("agent-worktree create [--from <ref>] <name>");
     expect(bare.stdout).toContain("agent-worktree remove [--force] <name>");
     expect(cli(dir, ["--help"]).stdout).toBe(bare.stdout);
   });

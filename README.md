@@ -2,7 +2,7 @@
 
 Task worktrees, so coding agents working in parallel never share a checkout: each task gets its own, set up and torn down by the project's own commands. agent-worktree never works out what a checkout needs: `agent-worktree install` writes the setup and teardown commands and the port count the project gives it into hooks, and agent-worktree runs those.
 
-- `agent-worktree create <name>` makes a git worktree outside the repository, runs the project's setup hook in it, and prints its path.
+- `agent-worktree create <name>` makes a git worktree outside the repository, on a new branch cut from `origin`'s default branch as `origin` has it now, runs the project's setup hook in it, and prints its path.
 - `agent-worktree remove <name>` runs the project's teardown hook, removes the worktree, and once its remote's default branch has the branch, deletes it locally and, when it was pushed with an upstream, on that remote. When the upstream holds a commit the branch lacks, it keeps both copies.
 - The `cniska-worktree` Claude Code plugin sends Claude Code's own worktrees through the same commands.
 
@@ -89,7 +89,7 @@ git worktree remove ../<name>
 
 | Command | Does |
 | --- | --- |
-| `agent-worktree create <name>` | Create the worktree on branch `<name>`, run setup, print the path. Rerun to resume a failed setup. |
+| `agent-worktree create [--from <ref>] <name>` | Create the worktree on branch `<name>`, as [Where `create` cuts a branch](#where-create-cuts-a-branch) says, run setup, print the path. Rerun to resume a failed setup. |
 | `agent-worktree init` | Run setup in the current checkout, primary or task worktree. |
 | `agent-worktree remove [--force] <name>` | Run teardown and remove the worktree, then settle its branch as [How `remove` settles a branch](#how-remove-settles-a-branch) says. Without `--force` a dirty worktree, one with submodules or a failed teardown refuses; a locked worktree always does. |
 | `agent-worktree prune` | Prune git's stale worktree entries, tear down every worktree that is gone but still registered, and remove every clean worktree whose pushed branch landed, other than the one it runs in, settling each one's branch as `remove` does; refuses with the names whose teardown failed. |
@@ -100,6 +100,13 @@ git worktree remove ../<name>
 | `agent-worktree --version` | Print the version alone on one line. |
 
 Results go to stdout. A refusal goes to stderr with the act that resolves it, and exits 1; a usage error exits 2.
+
+### Where `create` cuts a branch
+
+An existing branch `<name>` is checked out. A new one is cut with no upstream, so `remove` and `prune` settle it as `create` made it:
+
+- Without `--from`, from `origin`'s default branch, which `create` reads and fetches first, as `remove` does. With no `origin`, or one with no default branch, it is cut from the primary's HEAD, with a note on stderr. When `origin` cannot be reached within 60 seconds, `create` refuses and names `--from HEAD`, rather than cut from a base that may trail.
+- With `--from <ref>`, from the commit `<ref>` names in the checkout `create` runs in, without reaching a remote. `--from` with an existing branch refuses, and on a worktree `create` already made it is ignored, so a rerun resumes a failed setup.
 
 ### How `remove` settles a branch
 

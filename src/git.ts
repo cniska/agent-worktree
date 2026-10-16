@@ -105,7 +105,7 @@ function foundOrFault(repo: string, args: readonly string[]): GitRun | null {
   throw refuse("git_failed", { repo, command: described(args), exit: run.exit, detail: run.err });
 }
 
-function branchExists(repo: string, name: string): boolean {
+export function branchExists(repo: string, name: string): boolean {
   return foundOrFault(repo, ["show-ref", "--verify", "--quiet", `refs/heads/${name}`]) !== null;
 }
 
@@ -121,9 +121,12 @@ export function hasSubmodules(worktree: string): boolean {
     .some((line) => line.startsWith(SUBMODULE_MODE));
 }
 
-export function addWorktree(repo: string, path: string, branch: string): void {
-  const target = branchExists(repo, branch) ? [branch] : ["-b", branch];
-  gitOrRefusal(repo, ["worktree", "add", path, ...target]);
+export function checkoutWorktree(repo: string, path: string, branch: string): void {
+  gitOrRefusal(repo, ["worktree", "add", path, branch]);
+}
+
+export function cutWorktree(repo: string, path: string, branch: string, base: string): void {
+  gitOrRefusal(repo, ["worktree", "add", "--no-track", "-b", branch, path, base]);
 }
 
 export function worktreeRemoval(repo: string, path: string, force: boolean): GitRefusal | null {
@@ -236,8 +239,11 @@ export function deleteRef(repo: string, ref: string): void {
   gitOutput(repo, ["update-ref", "-d", ref]);
 }
 
-export function hasCommit(repo: string, sha: string): boolean {
-  return foundOrFault(repo, ["rev-parse", "--verify", "--quiet", `${sha}^{commit}`]) !== null;
+export function commitOf(repo: string, ref: string): string | null {
+  return (
+    foundOrFault(repo, ["rev-parse", "--verify", "--quiet", "--end-of-options", `${ref}^{commit}`])?.out ??
+    null
+  );
 }
 
 const SQUASH_IDENTITY = {

@@ -154,12 +154,12 @@ test("AC-35 with no free block create refuses and keeps setup pending, then resu
 test("AC-43 with no free block create first removes a worktree whose branch landed and takes its block", async () => {
   const w = world();
   const p = project(w);
-  bareRemote(w, p.dir);
   requestPorts(w, p.dir, "10\n");
   const record = join(w.root, "ports");
   installHook(w, p.dir, "setup", portRecording(record));
   const teardown = join(w.root, "teardown");
   installHook(w, p.dir, "teardown", `touch "${teardown}"`);
+  bareRemote(w, p.dir);
   const free = await freeUnits();
   succeeded(run(w, p.dir, ["create", "task-a"]));
   const landed = p.path("task-a");
@@ -179,9 +179,9 @@ test("AC-43 with no free block create first removes a worktree whose branch land
 test("AC-43 a landed worktree git refuses to remove is noted with why, and create still refuses for want of a block", async () => {
   const w = world();
   const p = project(w);
-  bareRemote(w, p.dir);
   requestPorts(w, p.dir, "10\n");
   installHook(w, p.dir, "teardown", 'touch "$WORKTREE_PATH/left"');
+  bareRemote(w, p.dir);
   const free = await freeUnits();
   succeeded(run(w, p.dir, ["create", "task-a"]));
   const landed = p.path("task-a");

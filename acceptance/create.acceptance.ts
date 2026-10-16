@@ -2,6 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
+  bareRemote,
   git,
   HOOKS,
   installHook,
@@ -14,6 +15,7 @@ import {
   repo,
   run,
   succeeded,
+  usageRefused,
   world,
 } from "./harness";
 
@@ -185,4 +187,134 @@ test("AC-9 init sets up the primary, a pending task worktree, and refuses any ot
     message: `${other} is neither the primary checkout nor a registered task worktree`,
     act: "cd into the primary checkout or a worktree agent-worktree created, and run init there",
   });
+});
+
+type W = ReturnType<typeof world>;
+
+function commitIn(w: W, checkout: string, file: string): string {
+  writeFileSync(join(checkout, file), `${file}\n`);
+  git(w, checkout, ["add", file]);
+  git(w, checkout, ["commit", "-q", "-m", file]);
+  return git(w, checkout, ["rev-parse", "HEAD"]);
+}
+
+function aheadOnRemote(w: W, bare: string, file: string): string {
+  const other = join(w.root, "clones", `other-${file}`);
+  git(w, w.root, ["clone", "-q", bare, other]);
+  return pushed(w, other, file);
+}
+
+function pushed(w: W, clone: string, file: string): string {
+  const tip = commitIn(w, clone, file);
+  git(w, clone, ["push", "-q", "origin", "HEAD:main"]);
+  return tip;
+}
+
+function upstreamOf(w: W, dir: string, branch: string): string {
+  return git(w, dir, ["for-each-ref", "--format=%(upstream)", `refs/heads/${branch}`]);
+}
+
+test("AC-52 create cuts a new branch from origin's default branch as fetched now, with no upstream, and remove deletes it once landed", () => {
+  const w = world();
+  const p = project(w);
+  const bare = bareRemote(w, p.dir);
+  commitIn(w, p.dir, "local-only");
+  const remoteTip = aheadOnRemote(w, bare, "remote-only");
+  const path = p.path("task-a");
+  expect(succeeded(run(w, p.dir, ["create", "task-a"]))).toEqual([path]);
+  expect(git(w, path, ["rev-parse", "HEAD"])).toBe(remoteTip);
+  expect(upstreamOf(w, p.dir, "task-a")).toBe("");
+  commitIn(w, path, "work");
+  git(w, path, ["push", "-q", "-u", "origin", "task-a"]);
+  git(w, path, ["push", "-q", "origin", "task-a:main"]);
+  expect(succeeded(run(w, p.dir, ["remove", "task-a"]))).toEqual([
+    "branch task-a deleted, merged into origin/main, and origin/task-a deleted",
+  ]);
+  expect(git(w, p.dir, ["branch", "--list", "task-a"])).toBe("");
+});
+
+test("AC-53 create --from cuts from the ref as the checkout it runs in names it, with no upstream and no fetch", () => {
+  const w = world();
+  const p = project(w);
+  const bare = bareRemote(w, p.dir);
+  const tagged = commitIn(w, p.dir, "tagged");
+  git(w, p.dir, ["tag", "v1"]);
+  commitIn(w, p.dir, "after-tag");
+  expect(succeeded(run(w, p.dir, ["create", "--from", "v1", "task-a"]))).toEqual([p.path("task-a")]);
+  expect(git(w, p.path("task-a"), ["rev-parse", "HEAD"])).toBe(tagged);
+  expect(upstreamOf(w, p.dir, "task-a")).toBe("");
+  const inTask = commitIn(w, p.path("task-a"), "in-task");
+  expect(succeeded(run(w, p.path("task-a"), ["create", "--from", "HEAD", "task-b"]))).toEqual([
+    p.path("task-b"),
+  ]);
+  expect(git(w, p.path("task-b"), ["rev-parse", "HEAD"])).toBe(inTask);
+  const stale = git(w, p.dir, ["rev-parse", "origin/main"]);
+  aheadOnRemote(w, bare, "unfetched");
+  expect(succeeded(run(w, p.dir, ["create", "--from", "origin/main", "task-c"]))).toEqual([p.path("task-c")]);
+  expect(git(w, p.path("task-c"), ["rev-parse", "HEAD"])).toBe(stale);
+  expect(git(w, p.dir, ["rev-parse", "origin/main"])).toBe(stale);
+  expect(upstreamOf(w, p.dir, "task-c")).toBe("");
+  expect(refused(run(w, p.dir, ["create", "--from", "nowhere", "task-d"]), "create")).toEqual({
+    message: `nowhere names no commit in ${p.dir}`,
+    act: "name a branch, tag or commit that exists there, and run the command again",
+  });
+  expect(usageRefused(run(w, p.dir, ["create", "--from", "", "task-d"]), "create")).toEqual({
+    message: "agent-worktree create --from takes a ref, and got none",
+    act: "agent-worktree create [--from <ref>] <name>",
+  });
+  expect(existsSync(p.path("task-d"))).toBe(false);
+  expect(git(w, p.dir, ["branch", "--list", "task-d"])).toBe("");
+  expect(ls(w, p.dir).map(({ name }) => name)).toEqual(["task-a", "task-b", "task-c"]);
+});
+
+test("AC-54 with no remote or an empty one create cuts from HEAD noting why, and an unreachable one is refused until --from", () => {
+  const w = world();
+  const p = project(w);
+  const head = git(w, p.dir, ["rev-parse", "HEAD"]);
+  const local = run(w, p.dir, ["create", "task-a"]);
+  expect(succeeded(local)).toEqual([p.path("task-a")]);
+  expect(local.stderr).toContain("agent-worktree: branch task-a cut from HEAD, no remote origin\n");
+  expect(git(w, p.path("task-a"), ["rev-parse", "HEAD"])).toBe(head);
+  const empty = join(w.root, "remotes", "empty.git");
+  git(w, w.root, ["init", "-q", "--bare", "-b", "main", empty]);
+  git(w, p.dir, ["remote", "add", "origin", empty]);
+  const unborn = run(w, p.dir, ["create", "task-b"]);
+  expect(succeeded(unborn)).toEqual([p.path("task-b")]);
+  expect(unborn.stderr).toContain(
+    "agent-worktree: branch task-b cut from HEAD, origin has no default branch\n",
+  );
+  expect(git(w, p.path("task-b"), ["rev-parse", "HEAD"])).toBe(head);
+  git(w, p.dir, ["remote", "set-url", "origin", join(w.root, "remotes", "missing.git")]);
+  const unreached = refused(run(w, p.dir, ["create", "task-c"]), "create");
+  expect(unreached.message).toStartWith("origin could not be reached to cut task-c: ");
+  expect(unreached.act).toBe(
+    "run the command again once origin can be reached, or run agent-worktree create --from HEAD task-c to cut from the HEAD of the checkout it runs in",
+  );
+  expect(existsSync(p.path("task-c"))).toBe(false);
+  expect(git(w, p.dir, ["branch", "--list", "task-c"])).toBe("");
+  expect(succeeded(run(w, p.dir, ["create", "--from", "HEAD", "task-c"]))).toEqual([p.path("task-c")]);
+  expect(git(w, p.path("task-c"), ["rev-parse", "HEAD"])).toBe(head);
+});
+
+test("AC-55 create --from refuses an existing branch, and is ignored, noted, on a worktree it already made", () => {
+  const w = world();
+  const p = project(w);
+  git(w, p.dir, ["branch", "task-a"]);
+  expect(refused(run(w, p.dir, ["create", "--from", "HEAD", "task-a"]), "create")).toEqual({
+    message: "--from HEAD would cut task-a, but branch task-a already exists",
+    act: "drop --from to check out the existing branch, or pick another name",
+  });
+  expect(existsSync(p.path("task-a"))).toBe(false);
+  expect(ls(w, p.dir)).toEqual([]);
+  const record = join(w.root, "setup-record");
+  const fixed = join(w.root, "fixed");
+  installHook(w, p.dir, "setup", `[ -f "${fixed}" ] || exit 3\n${recording(record)}`);
+  const path = p.path("task-b");
+  refused(run(w, p.dir, ["create", "--from", "HEAD", "task-b"]), "create");
+  writeFileSync(fixed, "");
+  const resumed = run(w, p.dir, ["create", "--from", "HEAD", "task-b"]);
+  expect(succeeded(resumed)).toEqual([path]);
+  expect(resumed.stderr).toContain("agent-worktree: worktree task-b exists, so --from HEAD is ignored\n");
+  expect(recorded(record)).toEqual([{ name: "task-b", path, primary: p.dir, cwd: path }]);
+  expect(ls(w, p.dir)).toEqual([{ name: "task-b", state: "ready", branch: "task-b", path }]);
 });

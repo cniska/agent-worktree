@@ -113,8 +113,8 @@ test("AC-40 prune settles the branches of worktrees deleted by hand, and an unre
   expect(pruned.stderr).toContain("agent-worktree: branch task-f kept, not merged into origin/main\n");
   expect(branches(w, p.dir)).toBe("task-f");
   expect(ls(w, p.dir)).toEqual([]);
-  git(w, p.dir, ["remote", "set-url", "origin", join(w.root, "remotes", "missing.git")]);
   succeeded(run(w, p.dir, ["create", "task-g"]));
+  git(w, p.dir, ["remote", "set-url", "origin", join(w.root, "remotes", "missing.git")]);
   const [unreached = ""] = succeeded(run(w, p.dir, ["remove", "task-g"]));
   expect(unreached).toStartWith("branch task-g kept, origin could not be reached: ");
   expect(branches(w, p.dir)).toBe("task-f\ntask-g");
