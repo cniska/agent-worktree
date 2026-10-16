@@ -1,6 +1,10 @@
 # agent-worktree
 
-Task worktrees for coding agents: one checkout per task, set up and torn down by the project's own commands. agent-worktree never works out what a checkout needs: `agent-worktree install` writes the setup and teardown commands and the port count the project gives it into hooks, and agent-worktree runs those.
+> Task worktrees for coding agents: one checkout per task, set up and torn down by the project's own commands
+
+[![CI](https://img.shields.io/github/actions/workflow/status/cniska/agent-worktree/check.yml?branch=main&style=flat&label=ci)](https://github.com/cniska/agent-worktree/actions/workflows/check.yml) [![License](https://img.shields.io/badge/license-MIT-blue?style=flat)](LICENSE)
+
+agent-worktree never works out what a checkout needs: `agent-worktree install` writes the setup and teardown commands and the port count the project gives it into hooks, and agent-worktree runs those.
 
 - `agent-worktree create <name>` makes a git worktree outside the repository, on a new branch cut from `origin`'s default branch as `origin` has it now, runs the project's setup hook in it, and prints its path.
 - `agent-worktree remove <name>` runs the project's teardown hook, removes the worktree, and once its remote's default branch has the branch, deletes it locally and, when it was pushed with an upstream, on that remote. When the upstream holds a commit the branch lacks, it keeps both copies.
