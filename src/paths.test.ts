@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdirSync, realpathSync, symlinkSync } from "node:fs";
-import { homedir, tmpdir, userInfo } from "node:os";
+import { mkdirSync, symlinkSync } from "node:fs";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import { dataDir, resolvedPath } from "./paths";
 import { removeScratchDirs, scratchDir } from "./repo.test-support";
@@ -28,11 +28,7 @@ describe("dataDir", () => {
     expect(dataDir({ HOME: value })).toBe(join(homedir(), ".local", "share", "agent-worktree"));
   });
 
-  test("reads a scratch home and data directory in every test, never the account's", () => {
-    for (const variable of ["HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CONFIG_HOME"]) {
-      expect(process.env[variable]).not.toStartWith(userInfo().homedir);
-      expect(process.env[variable]).toStartWith(realpathSync(tmpdir()));
-    }
+  test("reads process.env when no env is given", () => {
     expect(dataDir()).toBe(join(process.env.XDG_DATA_HOME ?? "", "agent-worktree"));
   });
 });

@@ -1,5 +1,6 @@
 import { afterEach, expect, test } from "bun:test";
-import { existsSync, mkdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, realpathSync, rmSync } from "node:fs";
+import { tmpdir, userInfo } from "node:os";
 import { join } from "node:path";
 import { version } from "../package.json";
 import {
@@ -9,12 +10,15 @@ import {
   refused,
   removeScratch,
   run,
+  runProgram,
   succeeded,
   usageRefused,
   world,
 } from "./harness";
 
 afterEach(removeScratch);
+
+const SCRATCH_VARIABLES = ["HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME"];
 
 const REMOVE_USAGE = "agent-worktree remove [--force] <name>";
 
@@ -102,7 +106,46 @@ test("AC-26 each command reads state changed on disk since the last", () => {
   );
 });
 
-test.todo("AC-27 the tests use scratch HOME and XDG directories", () => {});
+function within(dir: string, path: string): boolean {
+  return path === dir || path.startsWith(`${dir}/`);
+}
+
+function scratchVariables(
+  env: Readonly<Record<string, string | undefined>>,
+): Readonly<Record<string, string>> {
+  return Object.fromEntries(SCRATCH_VARIABLES.map((variable) => [variable, env[variable] ?? "unset"]));
+}
+
+function environmentOf(lines: readonly string[]): Readonly<Record<string, string>> {
+  return Object.fromEntries(
+    lines.map((line) => [line.slice(0, line.indexOf("=")), line.slice(line.indexOf("=") + 1)]),
+  );
+}
+
+test("AC-27 the test environment's HOME and XDG directories are scratch directories, not the account's", () => {
+  const account = realpathSync(userInfo().homedir);
+  const placed = (root: string) => (path: string) => ({
+    path,
+    inAccountHome: within(account, path),
+    inScratch: within(root, path),
+  });
+  const preloaded = Object.values(scratchVariables(process.env)).map((path) =>
+    existsSync(path) ? realpathSync(path) : path,
+  );
+  expect(preloaded.map(placed(realpathSync(tmpdir())))).toEqual(
+    preloaded.map((path) => ({ path, inAccountHome: false, inScratch: true })),
+  );
+  const w = world();
+  const seen = Object.values(
+    scratchVariables(environmentOf(succeeded(runProgram(w, w.root, ["/usr/bin/env"], {})))),
+  );
+  expect(seen.map(placed(w.root))).toEqual(
+    seen.map((path) => ({ path, inAccountHome: false, inScratch: true })),
+  );
+  const p = project(w);
+  const [path = ""] = succeeded(run(w, p.dir, ["path", "task-a"]));
+  expect(placed(w.root)(path)).toEqual({ path, inAccountHome: false, inScratch: true });
+});
 
 test("AC-28 the commands work with the network unavailable", () => {
   const w = world();
