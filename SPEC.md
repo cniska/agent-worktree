@@ -2,9 +2,7 @@
 
 > Task worktrees, so coding agents working in parallel never share a checkout: each task gets its own, set up and torn down by the project's own commands.
 
-This document states what must hold, not how. [`README.md`](README.md) has the install and the commands, and [`src/README.md`](src/README.md) maps the modules that meet these requirements.
-
-**Status: reverse-engineered from the code at `1904f2c`, with the worktree location (§2.1, §2.10) and the install (§2.8, §2.13) the owner decided.** §9 lists the known gaps and open questions.
+This document states what must hold, not how. [`README.md`](README.md) has the install and the commands, and [`src/README.md`](src/README.md) maps the modules that meet these requirements. §9 lists the known gaps and open questions.
 
 ## 1. Purpose & context
 
