@@ -117,25 +117,17 @@ Once the worktree is gone, `remove` settles its branch against the branch's remo
 
 ```mermaid
 flowchart TD
-  start(["Branch of the removed worktree"]) --> detached_q{"Detached?"}
-  detached_q -- "yes" --> detached["detached"]
-  detached_q -- "no" --> checked_out_q{"Checked out in another worktree?"}
-  checked_out_q -- "yes" --> checked_out["Kept: checked out"]
-  checked_out_q -- "no" --> remote_q{"Its remote"}
-  remote_q -- "does not exist" --> no_remote["Kept: no remote"]
-  remote_q -- "cannot be reached" --> remote_unreachable["Kept: remote unreachable"]
-  remote_q -- "has no default branch" --> no_default_branch["Kept: no default branch"]
-  remote_q -- "answers" --> tracks_default_q{"Tracks the default branch?"}
-  tracks_default_q -- "yes" --> tracks_default["Kept: tracks the default branch"]
-  tracks_default_q -- "no" --> landed_q{"Landed?"}
-  landed_q -- "no" --> unmerged["Kept: not merged"]
-  landed_q -- "merged, or squash-merged with its upstream gone" --> upstream_ahead_q{"Upstream holds commits the branch lacks?"}
-  upstream_ahead_q -- "yes" --> upstream_ahead["Kept: upstream ahead"]
-  upstream_ahead_q -- "no" --> upstream_q{"Upstream still on the remote?"}
-  upstream_q -- "no upstream, or gone" --> deleted["Deleted"]
-  upstream_q -- "yes" --> delete_upstream{"Remote deletes the upstream?"}
-  delete_upstream -- "yes" --> deleted_both["Deleted, with its upstream"]
-  delete_upstream -- "no" --> upstream_kept["Kept: upstream kept"]
+  branch(["Branch of the removed worktree"]) -- "detached" --> detached["No branch"]
+  branch -- "checked out elsewhere" --> kept["Kept"]
+  branch -- "tracks the default branch" --> kept
+  branch -- "no usable remote" --> kept
+  branch -- "otherwise" --> landed{"Landed in the default branch?"}
+  landed -- "no" --> kept
+  landed -- "merged or squash-merged" --> ahead{"Upstream has commits it lacks?"}
+  ahead -- "yes" --> kept
+  ahead -- "no" --> remote{"Remote deletes the upstream?"}
+  remote -- "refuses" --> kept
+  remote -- "yes, or none on the remote" --> deleted["Deleted"]
 ```
 
 `remove` prints the outcome on one line, the reason after `kept, `:
