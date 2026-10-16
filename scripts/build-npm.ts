@@ -17,7 +17,7 @@ const HOMEPAGE = "https://github.com/cniska/agent-worktree";
 const LAUNCHER = join(import.meta.dir, "..", "npm", NAME);
 const BUILDS_TOKEN = "__BUILDS__";
 const SUMMARY =
-  "Task worktrees, so coding agents working in parallel never share a checkout: each task gets its own, set up and torn down by the project's own commands.";
+  "Task worktrees for coding agents: one checkout per task, set up and torn down by the project's own commands.";
 
 const platformTarget = ({ os, cpu }: Platform): string => `${os}-${cpu}`;
 
