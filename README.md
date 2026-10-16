@@ -91,7 +91,7 @@ git worktree remove ../<name>
 | --- | --- |
 | `agent-worktree create <name>` | Create the worktree on branch `<name>`, run setup, print the path. Rerun to resume a failed setup. |
 | `agent-worktree init` | Run setup in the current checkout, primary or task worktree. |
-| `agent-worktree remove [--force] <name>` | Run teardown and remove the worktree, then settle its branch against its remote (the upstream's, else `origin`), fetching the remote's default branch first. A branch whose tip the default branch has, or a squash-merged one whose upstream the host already deleted and whose changes the default branch has, is deleted, with its upstream on the remote when that is still there; otherwise it is kept, as when it has not landed, the remote cannot be reached or it is checked out elsewhere, and `remove` prints which and why. `--force` never deletes a branch that has not landed. Without `--force` a dirty worktree, one with submodules or a failed teardown refuses; a locked worktree always does. |
+| `agent-worktree remove [--force] <name>` | Run teardown and remove the worktree, then settle its branch as [How `remove` settles a branch](#how-remove-settles-a-branch) says. Without `--force` a dirty worktree, one with submodules or a failed teardown refuses; a locked worktree always does. |
 | `agent-worktree prune` | Prune git's stale worktree entries, tear down every worktree that is gone but still registered, and remove every clean worktree whose pushed branch landed, other than the one it runs in, settling each one's branch as `remove` does; refuses with the names whose teardown failed. |
 | `agent-worktree ls` | One line per worktree: name, state, branch, port block, path. |
 | `agent-worktree path <name>` | Print the worktree's path. |
@@ -100,6 +100,53 @@ git worktree remove ../<name>
 | `agent-worktree --version` | Print the version alone on one line. |
 
 Results go to stdout. A refusal goes to stderr with the act that resolves it, and exits 1; a usage error exits 2.
+
+### How `remove` settles a branch
+
+Once the worktree is gone, `remove` settles its branch against the branch's remote: its upstream's remote, else `origin`. Once per remote in a command, it asks the remote for its default branch and its branches and fetches that default branch. It decides in this order, and the first case that holds settles the branch:
+
+1. A detached worktree has no branch, and `remove` prints `detached`.
+2. A branch checked out in another worktree is kept.
+3. A branch whose remote does not exist, cannot be reached or has no default branch is kept.
+4. A branch that tracks the remote's default branch itself is kept.
+5. A branch that has not landed is kept. It has landed when the default branch has its tip (merged), or when its upstream is gone from the remote and its whole change since the merge base matches one commit already in the default branch (squash-merged), as after a squash merge whose host deleted the branch.
+6. A landed branch whose upstream holds commits the branch lacks is kept.
+7. Any other landed branch is deleted. When its upstream is still on the remote, `remove` deletes that first, and when the remote refuses, the branch is kept. An upstream already gone is no error.
+
+`--force` never changes which branch is deleted.
+
+```mermaid
+flowchart TD
+  start(["Branch of the removed worktree"]) --> detached_q{"Detached?"}
+  detached_q -- "yes" --> detached["detached"]
+  detached_q -- "no" --> checked_out_q{"Checked out in another worktree?"}
+  checked_out_q -- "yes" --> checked_out["Kept: checked out"]
+  checked_out_q -- "no" --> remote_q{"Its remote"}
+  remote_q -- "does not exist" --> no_remote["Kept: no remote"]
+  remote_q -- "cannot be reached" --> remote_unreachable["Kept: remote unreachable"]
+  remote_q -- "has no default branch" --> no_default_branch["Kept: no default branch"]
+  remote_q -- "answers" --> tracks_default_q{"Tracks the default branch?"}
+  tracks_default_q -- "yes" --> tracks_default["Kept: tracks the default branch"]
+  tracks_default_q -- "no" --> landed_q{"Landed?"}
+  landed_q -- "no" --> unmerged["Kept: not merged"]
+  landed_q -- "merged, or squash-merged with its upstream gone" --> upstream_ahead_q{"Upstream holds commits the branch lacks?"}
+  upstream_ahead_q -- "yes" --> upstream_ahead["Kept: upstream ahead"]
+  upstream_ahead_q -- "no" --> upstream_q{"Upstream still on the remote?"}
+  upstream_q -- "no upstream, or gone" --> deleted["Deleted"]
+  upstream_q -- "yes" --> delete_upstream{"Remote deletes the upstream?"}
+  delete_upstream -- "yes" --> deleted_both["Deleted, with its upstream"]
+  delete_upstream -- "no" --> upstream_kept["Kept: upstream kept"]
+```
+
+`remove` prints the outcome on one line, the reason after `kept, `:
+
+```text
+branch fix-login deleted, merged into origin/main, and origin/fix-login deleted
+branch fix-login deleted, squash-merged into origin/main
+branch fix-login kept, not merged into origin/main
+branch fix-login kept, origin/fix-login has commits it lacks
+branch fix-login kept, checked out at /home/dev/other-checkout
+```
 
 ## Claude Code plugin
 
