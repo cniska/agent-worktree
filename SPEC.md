@@ -2,7 +2,7 @@
 
 > Task worktrees for coding agents: one checkout per task, set up and torn down by the project's own commands.
 
-This document states what must hold, not how. [`README.md`](README.md) has the install and the commands, and [`src/README.md`](src/README.md) maps the modules that meet these requirements. §9 lists the known gaps and open questions.
+This document states what must hold, not how. [`README.md`](README.md) has the install and the essential commands, [`docs/commands.md`](docs/commands.md) every command, and [`src/README.md`](src/README.md) maps the modules that meet these requirements. §9 lists the known gaps and open questions.
 
 ## 1. Purpose & context
 
@@ -204,7 +204,7 @@ Two agents in one checkout overwrite each other's files, so parallel work needs 
 
 - **D-1** — The `agent-worktree` CLI, run by Bun from a checkout and linked onto `PATH` by `mise install` in the primary checkout, never in a worktree, and the release binary `scripts/build-compiled.sh` compiles from it for darwin-arm64 and linux-x64, shipped by a GitHub release with `install.sh`, by the npm packages, installed with npm or bun, and by the `cniska/tap` Homebrew formula, as [`docs/releasing.md`](docs/releasing.md) says.
 - **D-2** — The `cniska-worktree` Claude Code plugin in `plugin/`.
-- **D-3** — `README.md`, `AGENTS.md`, `src/README.md`, `docs/releasing.md` and this spec.
+- **D-3** — `README.md` for the install and the essential commands; `docs/contract.md` for the project contract, where worktrees live, ports and use without the CLI; `docs/commands.md` for the commands and their branch rules; `docs/plugin.md` for the plugin; `docs/development.md` for development; `docs/releasing.md` for releasing; `AGENTS.md`, `src/README.md` and this spec.
 - **D-4** — The test suite, run by `bun run check`, and the acceptance suite, run by `bun run acceptance`, whose test names cite the criteria in §5. The acceptance suite drives the CLI from source, the compiled release binary, `install.sh` against a stand-in for the release downloads, and the npm packages through their launcher.
 
 ## 7. Constraints (fixed)

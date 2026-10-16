@@ -14,9 +14,7 @@ const INSTALLED_WORKFLOW = "# agent-gate:";
 
 const GUARDED_FILES = ["SPEC.md", "README.md"];
 
-const README = "README.md";
-
-const CONTRIBUTOR_SECTION = "## Development";
+const CONTRIBUTOR_DOC = "docs/development.md";
 
 const SUGGESTED = /^(cniska-skills|agent-skills)$/;
 
@@ -24,21 +22,12 @@ const OTHER_TOOL = /\b(cniska-(skills|record|gates)|agent-(record|gates|skills))
 
 type Guarded = { readonly path: string; readonly text: string };
 
-function contributorLines(text: string): ReadonlySet<number> {
-  const lines = text.split("\n");
-  const start = lines.indexOf(CONTRIBUTOR_SECTION);
-  if (start === -1) return new Set();
-  const after = lines.findIndex((line, index) => index > start && /^## /.test(line));
-  const end = after === -1 ? lines.length : after;
-  return new Set(Array.from({ length: end - start }, (_, offset) => start + offset + 1));
-}
-
 function namings({ path, text }: Guarded): readonly string[] {
-  const suggesting = path === README ? contributorLines(text) : new Set<number>();
+  const suggesting = path === CONTRIBUTOR_DOC;
   return text.split("\n").flatMap((line, index) => {
     const at = index + 1;
     return [...line.matchAll(OTHER_TOOL)]
-      .filter(([match]) => !(suggesting.has(at) && SUGGESTED.test(match)))
+      .filter(([match]) => !(suggesting && SUGGESTED.test(match)))
       .map(([match]) => `${path}:${at} names another tool: ${match}`);
   });
 }
@@ -69,14 +58,17 @@ describe("the repo stands alone", () => {
     expect(guardedFiles().flatMap(namings)).toEqual([]);
   });
 
-  test("lets only the README's contributor section suggest cniska-skills", () => {
-    const text = `# x\n\nUse cniska-skills.\n\n${CONTRIBUTOR_SECTION}\n\nTry cniska-skills or agent-gates.\n\n## Next\n\ncniska-skills`;
-    expect(namings({ path: README, text })).toEqual([
-      "README.md:3 names another tool: cniska-skills",
-      "README.md:7 names another tool: agent-gates",
-      "README.md:11 names another tool: cniska-skills",
+  test("lets only docs/development.md suggest cniska-skills", () => {
+    const text = "# x\n\nUse cniska-skills.\n\n## Next\n\nTry agent-skills or agent-gates.";
+    expect(namings({ path: "docs/development.md", text })).toEqual([
+      "docs/development.md:7 names another tool: agent-gates",
     ]);
-    expect(namings({ path: "SPEC.md", text })).toHaveLength(4);
+    expect(namings({ path: "README.md", text })).toEqual([
+      "README.md:3 names another tool: cniska-skills",
+      "README.md:7 names another tool: agent-skills",
+      "README.md:7 names another tool: agent-gates",
+    ]);
+    expect(namings({ path: "docs/commands.md", text })).toHaveLength(3);
   });
 
   test("guards the release paths and the workflows it owns, but not itself or a workflow another tool installs", () => {
@@ -84,6 +76,7 @@ describe("the repo stands alone", () => {
     expect(paths).toContain("scripts/install.sh");
     expect(paths).toContain("npm/agent-worktree");
     expect(paths).toContain("docs/releasing.md");
+    expect(paths).toContain("docs/development.md");
     expect(paths).toContain(".github/workflows/release.yml");
     expect(paths).toContain(".github/workflows/check.yml");
     expect(paths).not.toContain(SELF);
