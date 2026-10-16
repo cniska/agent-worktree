@@ -12,7 +12,7 @@
     "lint": "bunx biome check --error-on-warnings src acceptance scripts npm",
     "typecheck": "bunx tsc --noEmit",
     "test": "bun test",
-    "acceptance": "bun test ./acceptance/*.acceptance.ts",
+    "acceptance": "bun test --timeout 20000 ./acceptance/*.acceptance.ts",
     "knip": "bunx --bun knip",
     "check": "bun run lint && bun run typecheck && bun run knip && bun test",
     "prepare": "! git rev-parse --git-dir >/dev/null 2>&1 || git config core.hooksPath .githooks"

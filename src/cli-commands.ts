@@ -68,10 +68,15 @@ function listedLine({ path, state }: Listed): string {
   return [state.name, stateText(state), branchText(state), portsText(state), path].join("\t");
 }
 
-function fromOption(value: unknown, command: Command): string | null {
+type StringOption = { readonly option: string; readonly takes: string };
+
+function stringOption(value: unknown, { option, takes }: StringOption, command: Command): string | null {
   if (value === undefined) return null;
   if (typeof value !== "string" || value === "")
-    throw usageRefusal(`agent-worktree ${command.name} --from takes a ref, and got none`, command.usage);
+    throw usageRefusal(
+      `agent-worktree ${command.name} --${option} takes ${takes}, and got none`,
+      command.usage,
+    );
   return value;
 }
 
@@ -82,7 +87,7 @@ const createCommand: Command = {
     "create the worktree, on a new branch cut from its remote's default branch as fetched now or from --from, run setup and print its path; rerun to resume a failed setup",
   options: { from: { type: "string" } },
   async run(positionals, values) {
-    const from = fromOption(values.from, this);
+    const from = stringOption(values.from, { option: "from", takes: "a ref" }, this);
     const target = namedTarget(positionals, this);
     return [await create(target.project, target.name, { here: checkout(process.cwd()).toplevel, from })];
   },
@@ -171,13 +176,6 @@ const hookCommand: Command = {
   },
 };
 
-function commandOption(value: unknown, option: string, command: Command): string | null {
-  if (value === undefined) return null;
-  if (typeof value !== "string" || value === "")
-    throw usageRefusal(`agent-worktree install --${option} takes a command, and got none`, command.usage);
-  return value;
-}
-
 function portsOption(value: unknown, command: Command): PortRequest | null {
   if (value === undefined) return null;
   const request = typeof value === "string" ? parsePortRequest(value) : null;
@@ -203,8 +201,8 @@ const installCommand: Command = {
   async run(positionals, values) {
     noPositionals(positionals, this);
     const installed = {
-      setup: commandOption(values.setup, "setup", this),
-      teardown: commandOption(values.teardown, "teardown", this),
+      setup: stringOption(values.setup, { option: "setup", takes: "a command" }, this),
+      teardown: stringOption(values.teardown, { option: "teardown", takes: "a command" }, this),
       ports: portsOption(values.ports, this),
     };
     if (installed.setup === null && installed.teardown === null && installed.ports === null)

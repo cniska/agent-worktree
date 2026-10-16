@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   bareRemote,
+  commitIn,
   git,
   HOOKS,
   installHook,
@@ -191,13 +192,6 @@ test("AC-9 init sets up the primary, a pending task worktree, and refuses any ot
 
 type W = ReturnType<typeof world>;
 
-function commitIn(w: W, checkout: string, file: string): string {
-  writeFileSync(join(checkout, file), `${file}\n`);
-  git(w, checkout, ["add", file]);
-  git(w, checkout, ["commit", "-q", "-m", file]);
-  return git(w, checkout, ["rev-parse", "HEAD"]);
-}
-
 function aheadOnRemote(w: W, bare: string, file: string): string {
   const other = join(w.root, "clones", `other-${file}`);
   git(w, w.root, ["clone", "-q", bare, other]);
@@ -317,4 +311,8 @@ test("AC-55 create --from refuses an existing branch, and is ignored, noted, on 
   expect(resumed.stderr).toContain("agent-worktree: worktree task-b exists, so --from HEAD is ignored\n");
   expect(recorded(record)).toEqual([{ name: "task-b", path, primary: p.dir, cwd: path }]);
   expect(ls(w, p.dir)).toEqual([{ name: "task-b", state: "ready", branch: "task-b", path }]);
+  const again = run(w, p.dir, ["create", "--from", "HEAD", "task-b"]);
+  expect(succeeded(again)).toEqual([path]);
+  expect(again.stderr).toContain("agent-worktree: worktree task-b exists, so --from HEAD is ignored\n");
+  expect(recorded(record)).toEqual([{ name: "task-b", path, primary: p.dir, cwd: path }]);
 });

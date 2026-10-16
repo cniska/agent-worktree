@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   bareRemote,
+  commitIn,
   git,
   HOOKS,
   installHook,
@@ -36,12 +37,6 @@ test("AC-10 remove tears down in the primary, removes the worktree and keeps a b
   expect(succeeded(run(w, p.dir, ["remove", "task-d"]))).toEqual(["detached"]);
   expect(existsSync(p.path("task-d"))).toBe(false);
 });
-
-function commitIn(w: ReturnType<typeof world>, checkout: string, file: string): void {
-  writeFileSync(join(checkout, file), `${file}\n`);
-  git(w, checkout, ["add", file]);
-  git(w, checkout, ["commit", "-q", "-m", file]);
-}
 
 function branches(w: ReturnType<typeof world>, dir: string): string {
   return git(w, dir, ["for-each-ref", "--format=%(refname:short)", "refs/heads/task-*"]);

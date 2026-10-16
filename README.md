@@ -174,7 +174,7 @@ bin/agent-worktree create <name>
 ### Checks
 
 - `bun run check` runs the lint, the typecheck, knip (an export, file or dependency nothing uses) and the tests, and `.githooks/pre-commit.d/check` runs it before each commit.
-- `bun run acceptance` proves the criteria in [`SPEC.md`](SPEC.md) through the CLI alone, as [`AGENTS.md`](AGENTS.md) describes.
+- `bun run acceptance` proves the criteria in [`SPEC.md`](SPEC.md) through the CLI alone, as [`AGENTS.md`](AGENTS.md) describes. Each test gets 20 seconds rather than Bun's default 5, since one drives git and the CLI dozens of times and a `create` with a remote also reads and fetches it.
 - `scripts/build-compiled.sh <outfile>` compiles the CLI into one executable that needs no Bun, the binary a release ships.
 - `scripts/release.sh patch|minor|major` bumps the version and tags it; `.github/workflows/release.yml` builds the tag into a GitHub release, the npm packages and a Homebrew repin, as [Releasing](docs/releasing.md) says.
 - `bun run format` formats `src/`, `acceptance/`, `scripts/` and `npm/` with Biome, and the format gate runs it with the linter off before each commit and stages what it changes in the staged files.

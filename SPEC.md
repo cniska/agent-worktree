@@ -198,7 +198,7 @@ Two agents in one checkout overwrite each other's files, so parallel work needs 
 - **AC-52** — With a local bare repository as `origin` whose `main` is ahead of the primary's HEAD and of the local `origin/main`: `create task-a` cuts `task-a` at `origin`'s `main` with no upstream; pushed with an upstream and pushed to `origin`'s `main`, `remove task-a` deletes it here and on `origin`. (FR-13, FR-22, NF-4)
 - **AC-53** — `create --from v1` cuts from the tag; `--from HEAD` run inside a task worktree cuts from that worktree's HEAD; `--from origin/main` after a push to `origin` cuts from the local `origin/main` and fetches nothing; none has an upstream; `--from nowhere` is refused as `unknown_ref` and `--from ""` exits 2 with the usage, registering nothing. (FR-13)
 - **AC-54** — With no remote, then an empty bare repository as `origin`: `create` cuts from HEAD, noting each reason; with `origin` pointing at no repository: `remote_unreachable` naming `--from HEAD`, nothing registered; `create --from HEAD` then succeeds. (FR-13, NF-2, NF-4)
-- **AC-55** — `create --from HEAD` on an existing branch: `branch_exists`, nothing registered; on a worktree whose setup failed, the rerun with the same `--from` resumes setup, noting it ignored `--from`. (FR-13, FR-14, FR-15, NF-2)
+- **AC-55** — `create --from HEAD` on an existing branch: `branch_exists`, nothing registered; on a worktree whose setup failed, the rerun with the same `--from` resumes setup, noting it ignored `--from`; run once more on the now ready worktree, it prints the path with the same note and runs no setup. (FR-13, FR-14, FR-15, NF-2)
 
 ## 6. Deliverables
 

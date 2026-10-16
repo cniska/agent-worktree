@@ -212,6 +212,13 @@ export function git(w: World, cwd: string, args: readonly string[]): string {
   return ran.stdout.trim();
 }
 
+export function commitIn(w: World, checkout: string, file: string): string {
+  writeFileSync(join(checkout, file), `${file}\n`);
+  git(w, checkout, ["add", file]);
+  git(w, checkout, ["commit", "-q", "-m", file]);
+  return git(w, checkout, ["rev-parse", "HEAD"]);
+}
+
 export function repo(w: World, at = join(w.root, "clones", "repo")): string {
   mkdirSync(dirname(at), { recursive: true });
   git(w, w.root, ["init", "-q", "-b", "main", at]);
