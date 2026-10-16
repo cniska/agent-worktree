@@ -1,8 +1,8 @@
 # Releasing
 
-A `v*` tag on `main` runs `.github/workflows/release.yml`. It compiles darwin-arm64 and linux-x64 with `scripts/build-compiled.sh`, smoke-tests each build by printing its version and running `create` then `remove` on a made-up worktree name in a scratch repository, attaches each build's tarball and sha256, `install.sh` and `SHA256SUMS.txt` to a GitHub release, publishes the three npm packages with provenance, and dispatches `cniska/homebrew-tap` to repin `Formula/agent-worktree.rb`. Run by `workflow_dispatch` instead, it builds, smoke-tests and packs everything and publishes nothing: the release files and `npm pack --dry-run` are its output.
+A `v*` tag on `main` runs `.github/workflows/release.yml`. It compiles darwin-arm64 and linux-x64 with `scripts/build-compiled.sh`, smoke-tests each build with `scripts/smoke.sh` (it prints its version, then runs `create` and `remove` on a made-up worktree name in a scratch repository), attaches each build's tarball and sha256, `install.sh` and `SHA256SUMS.txt` to a GitHub release, publishes the three npm packages with provenance, and dispatches `cniska/homebrew-tap` to repin `Formula/agent-worktree.rb`. Once the registry serves all three published packages, a job on each platform installs the version with `npm install -g` and with `bun add -g`, and runs `scripts/smoke.sh` on each install's launcher with no `node` or `bun` on `PATH`; either install failing fails the run, and a patch release carries the fix. Run by `workflow_dispatch` instead, it builds, smoke-tests and packs everything and publishes nothing: the release files and `npm pack --dry-run` are its output.
 
-A release never updates itself. Each channel updates the way it installed: `brew upgrade agent-worktree`, `npm update -g @cniska/agent-worktree`, or the curl line run again.
+A release never updates itself. Each channel updates the way it installed: `brew upgrade agent-worktree`, `npm update -g @cniska/agent-worktree`, `bun update -g @cniska/agent-worktree`, or the curl line run again.
 
 ## The owner's setup, once
 
@@ -17,14 +17,32 @@ Step 4 comes before the first tag. Steps 1 to 3 need the first release's files, 
 
 `package.json` already reads `0.1.0`, so the first release is a tag, not `scripts/release.sh`.
 
-1. `git tag -m v0.1.0 v0.1.0 && git push origin v0.1.0`, and watch the workflow. The npm job fails on a package not yet set up for trusted publishing: do setup steps 1 to 3 from the release's files, then re-run the job.
+1. `git tag -m v0.1.0 v0.1.0 && git push origin v0.1.0`, and watch the workflow. The npm job fails on a package not yet set up for trusted publishing: do setup steps 1 to 3 from the release's files, then re-run the failed npm job together with the smoke jobs that wait on it.
 2. In `cniska/homebrew-tap`, on the `agent-worktree-formula` branch, which adds `Formula/agent-worktree.rb` and its README section, repin the formula to the release before merging, so `main` never pins checksums of a build no release holds: download the release's `SHA256SUMS.txt`, run `python3 scripts/bump-formula.py Formula/agent-worktree.rb cniska/agent-worktree SHA256SUMS.txt v0.1.0`, commit, then merge. `brew install cniska/tap/agent-worktree` installs it. From the next release on, the `homebrew` job's dispatch repins it.
-3. Land the channel lines in `README.md`'s Install section, above the clone steps, and say there that each channel updates itself as above:
+3. Land the channel lines in `README.md`'s Install section, above the clone steps, each in its own block under a short label, and after them a sentence saying each channel updates itself as above:
+
+   curl:
 
    ```bash
    curl -fsSL https://github.com/cniska/agent-worktree/releases/latest/download/install.sh | sh
+   ```
+
+   Homebrew:
+
+   ```bash
    brew install cniska/tap/agent-worktree
+   ```
+
+   npm:
+
+   ```bash
    npm install -g @cniska/agent-worktree
+   ```
+
+   Bun:
+
+   ```bash
+   bun add -g @cniska/agent-worktree
    ```
 
 ## Each later release
@@ -37,4 +55,4 @@ The release check, `scripts/release-check.ts`, runs on every tag in the workflow
 
 ## A bad release
 
-Publish the fix as a new, higher version; a tag is never moved. A machine that installed the bad release takes the fix through its channel's update.
+A tag whose build failed published nothing, since every publish job waits on the builds. To tag the same version again after a run that published no release, delete any draft the `release` job left for the tag (`gh release delete vX.Y.Z`), then the tag on origin and locally, then, once the fix is on `main`, tag `main` again (`git tag -m vX.Y.Z vX.Y.Z`) and push that tag. Once a tag has published anything, publish the fix as a new, higher version; a tag is never moved. With release immutability on, GitHub enforces that: a published release's tag can be neither moved nor deleted, and its name cannot be used again even after the release is deleted. A machine that installed the bad release takes the fix through its channel's update.
