@@ -64,28 +64,38 @@ function traceProblems(
   ];
 }
 
-function isTestCall(callee: Node): boolean {
-  if (callee.type === "Identifier") return callee.name === "test";
-  return (
-    callee.type === "MemberExpression" && callee.object.type === "Identifier" && callee.object.name === "test"
-  );
+type AcceptanceTest = { readonly name: string | null; readonly modifier: string | null };
+
+const PLAIN_TEST = "test";
+
+function testCalleeOf(callee: Node): { readonly modifier: string | null } | null {
+  if (callee.type === "Identifier") return callee.name === PLAIN_TEST ? { modifier: null } : null;
+  if (callee.type !== "MemberExpression") return null;
+  if (callee.object.type !== "Identifier" || callee.object.name !== PLAIN_TEST) return null;
+  return { modifier: callee.property.type === "Identifier" ? callee.property.name : "computed" };
 }
 
-function testNames(source: string): readonly (string | null)[] {
+function testsOf(source: string): readonly AcceptanceTest[] {
   return [...nodesOf(source)].flatMap((node) => {
-    if (node.type !== "CallExpression" || !isTestCall(node.callee)) return [];
+    if (node.type !== "CallExpression") return [];
+    const callee = testCalleeOf(node.callee);
+    if (callee === null) return [];
     const [name] = node.arguments;
-    return [name?.type === "StringLiteral" ? name.value : null];
+    return [{ name: name?.type === "StringLiteral" ? name.value : null, modifier: callee.modifier }];
   });
 }
 
-function suiteProblems(criteria: readonly Criterion[], names: readonly (string | null)[]): readonly string[] {
+function suiteProblems(criteria: readonly Criterion[], tests: readonly AcceptanceTest[]): readonly string[] {
   const known = new Set(criteria.map(({ id }) => id));
   const proven = new Set<string>();
   const problems: string[] = [];
-  for (const name of names) {
+  for (const { name, modifier } of tests) {
     if (name === null) {
       problems.push("an acceptance test's name is not a string literal");
+      continue;
+    }
+    if (modifier !== null) {
+      problems.push(`acceptance test "${name}" is a test.${modifier}, not a test that runs`);
       continue;
     }
     const proves = PROVES.exec(name)?.[0].trim().split(" ") ?? [];
@@ -98,23 +108,23 @@ function suiteProblems(criteria: readonly Criterion[], names: readonly (string |
   }
   return [
     ...problems,
-    ...[...known].filter((id) => !proven.has(id)).map((id) => `${id} has no acceptance test or todo`),
+    ...[...known].filter((id) => !proven.has(id)).map((id) => `${id} has no acceptance test`),
   ];
 }
 
 function citationProblems(spec: string, sources: readonly string[]): readonly string[] {
   const ids = definedIds(spec);
   const criteria = criteriaOf(spec);
-  const names = sources.flatMap(testNames);
+  const tests = sources.flatMap(testsOf);
   const empty = [
     ...(criteria.length === 0 ? ["the spec defines no acceptance criteria"] : []),
-    ...(names.length === 0 ? ["the suite holds no acceptance tests"] : []),
+    ...(tests.length === 0 ? ["the suite holds no acceptance tests"] : []),
   ];
   if (empty.length > 0) return empty;
   return [
     ...numberingProblems(ids),
     ...traceProblems(spec, ids, criteria),
-    ...suiteProblems(criteria, names),
+    ...suiteProblems(criteria, tests),
   ];
 }
 
@@ -128,7 +138,9 @@ const SPEC = `
 - **AC-2** — Remove it: it is gone. (FR-2)
 `;
 
-const SUITE = [`test("AC-1 creates offline", () => {});`, `test.todo("AC-2 removes it");`];
+const PROVEN = `test("AC-1 creates offline", () => {});`;
+
+const SUITE = [PROVEN, `test("AC-2 removes it", () => {});`];
 
 describe("the spec and the acceptance suite", () => {
   test("cite each other completely", () => {
@@ -159,7 +171,7 @@ describe("the citation check", () => {
   });
 
   test("fails a test citing a criterion the spec does not define", () => {
-    expect(citationProblems(SPEC, [...SUITE, `test.todo("AC-3 prunes");`])).toEqual([
+    expect(citationProblems(SPEC, [...SUITE, `test("AC-3 prunes", () => {});`])).toEqual([
       'acceptance test "AC-3 prunes" cites AC-3, which the spec does not define',
     ]);
   });
@@ -170,8 +182,19 @@ describe("the citation check", () => {
     ]);
   });
 
-  test("fails a criterion with neither a test nor a todo", () => {
-    expect(citationProblems(SPEC, SUITE.slice(0, 1))).toEqual(["AC-2 has no acceptance test or todo"]);
+  test("fails a criterion with no test", () => {
+    expect(citationProblems(SPEC, [PROVEN])).toEqual(["AC-2 has no acceptance test"]);
+  });
+
+  test("fails a todo or a skipped test as not proving its criterion", () => {
+    expect(citationProblems(SPEC, [PROVEN, `test.todo("AC-2 removes it");`])).toEqual([
+      'acceptance test "AC-2 removes it" is a test.todo, not a test that runs',
+      "AC-2 has no acceptance test",
+    ]);
+    expect(citationProblems(SPEC, [PROVEN, `test.skip("AC-2 removes it", () => {});`])).toEqual([
+      'acceptance test "AC-2 removes it" is a test.skip, not a test that runs',
+      "AC-2 has no acceptance test",
+    ]);
   });
 
   test("fails an id that is not a family and a whole number", () => {
