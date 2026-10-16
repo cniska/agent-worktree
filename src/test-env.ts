@@ -3,25 +3,19 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const INHERITED_GIT_STATE = [
-  "GIT_DIR",
-  "GIT_INDEX_FILE",
-  "GIT_WORK_TREE",
-  "GIT_PREFIX",
-  "GIT_OBJECT_DIRECTORY",
-  "GIT_ALTERNATE_OBJECT_DIRECTORIES",
-  "GIT_AUTHOR_DATE",
-  "GIT_COMMITTER_DATE",
-];
+const GIT_KEY_PREFIX = "GIT_";
 
-for (const name of INHERITED_GIT_STATE) delete process.env[name];
+export function isolateGit(env: NodeJS.ProcessEnv): void {
+  for (const name of Object.keys(env)) if (name.startsWith(GIT_KEY_PREFIX)) delete env[name];
+  env.GIT_CONFIG_GLOBAL = "/dev/null";
+  env.GIT_CONFIG_NOSYSTEM = "1";
+  env.GIT_AUTHOR_NAME = "T";
+  env.GIT_AUTHOR_EMAIL = "t@example.com";
+  env.GIT_COMMITTER_NAME = "T";
+  env.GIT_COMMITTER_EMAIL = "t@example.com";
+}
 
-process.env.GIT_CONFIG_GLOBAL = "/dev/null";
-process.env.GIT_CONFIG_NOSYSTEM = "1";
-process.env.GIT_AUTHOR_NAME = "T";
-process.env.GIT_AUTHOR_EMAIL = "t@example.com";
-process.env.GIT_COMMITTER_NAME = "T";
-process.env.GIT_COMMITTER_EMAIL = "t@example.com";
+isolateGit(process.env);
 
 const scratchHome = realpathSync(mkdtempSync(join(tmpdir(), "agent-worktree-home-")));
 
