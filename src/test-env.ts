@@ -26,6 +26,15 @@ const SCRATCH_DIRS = {
   XDG_STATE_HOME: "state",
 } as const;
 
+type ScratchVariable = keyof typeof SCRATCH_DIRS;
+
+export const ownerEnv: Readonly<Record<ScratchVariable, string | undefined>> = {
+  HOME: process.env.HOME,
+  XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME,
+  XDG_DATA_HOME: process.env.XDG_DATA_HOME,
+  XDG_STATE_HOME: process.env.XDG_STATE_HOME,
+};
+
 for (const [variable, dir] of Object.entries(SCRATCH_DIRS)) {
   const path = join(scratchHome, dir);
   mkdirSync(path);
