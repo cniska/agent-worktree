@@ -12,7 +12,7 @@ import {
   recorded,
   recording,
   refused,
-  removeScratch,
+  removeScratchDirs,
   repo,
   run,
   succeeded,
@@ -20,7 +20,7 @@ import {
   world,
 } from "./harness";
 
-afterEach(removeScratch);
+afterEach(removeScratchDirs);
 
 test("AC-5 create refuses each invalid name, a case collision, an unsupported layout and a non-checkout", () => {
   const w = world();

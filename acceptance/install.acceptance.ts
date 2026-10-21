@@ -13,14 +13,14 @@ import {
   project,
   recorded,
   recording,
-  removeScratch,
+  removeScratchDirs,
   run,
   succeeded,
   usageRefused,
   world,
 } from "./harness";
 
-afterEach(removeScratch);
+afterEach(removeScratchDirs);
 
 const INSTALL_USAGE =
   "agent-worktree install [--local] [--setup <command>] [--teardown <command>] [--ports <n>]";

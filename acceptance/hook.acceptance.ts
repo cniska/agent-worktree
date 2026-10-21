@@ -9,13 +9,13 @@ import {
   pluginCommand,
   project,
   refused,
-  removeScratch,
+  removeScratchDirs,
   run,
   succeeded,
   world,
 } from "./harness";
 
-afterEach(removeScratch);
+afterEach(removeScratchDirs);
 
 test("AC-18 hook creates on WorktreeCreate and force-removes on WorktreeRemove", () => {
   const w = world();

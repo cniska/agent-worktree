@@ -9,14 +9,14 @@ import {
   launch,
   project,
   refused,
-  removeScratch,
+  removeScratchDirs,
   requestPorts,
   run,
   succeeded,
   world,
 } from "./harness";
 
-afterEach(removeScratch);
+afterEach(removeScratchDirs);
 
 const SET_BY_SH = new Set(["PWD", "SHLVL"]);
 

@@ -12,14 +12,14 @@ import {
   recorded,
   recording,
   refused,
-  removeScratch,
+  removeScratchDirs,
   run,
   succeeded,
   type World,
   world,
 } from "./harness";
 
-afterEach(removeScratch);
+afterEach(removeScratchDirs);
 
 function earlier(w: World, p: Project, name: string): string {
   const path = join(p.dir, ".claude", "worktrees", name);

@@ -8,7 +8,7 @@ import {
   project,
   type Ran,
   releaseAssets,
-  removeScratch,
+  removeScratchDirs,
   runOnPath,
   runProgram,
   SYSTEM_PATH,
@@ -18,7 +18,7 @@ import {
   world,
 } from "./harness";
 
-afterEach(removeScratch);
+afterEach(removeScratchDirs);
 
 const BUILD_TIMEOUT_MS = 60_000;
 

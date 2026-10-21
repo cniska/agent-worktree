@@ -2,9 +2,9 @@ import { afterEach, expect, test } from "bun:test";
 import { existsSync, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { userInfo } from "node:os";
 import { dirname, join } from "node:path";
-import { git, keyOf, ls, project, removeScratch, repo, run, succeeded, world } from "./harness";
+import { git, keyOf, ls, project, removeScratchDirs, repo, run, succeeded, world } from "./harness";
 
-afterEach(removeScratch);
+afterEach(removeScratchDirs);
 
 test("AC-1 create and path print the worktree's place under XDG_DATA_HOME, outside the primary", () => {
   const w = world();

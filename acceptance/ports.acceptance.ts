@@ -17,7 +17,7 @@ import {
   portsRecorded,
   project,
   refused,
-  removeScratch,
+  removeScratchDirs,
   repo,
   requestPorts,
   run,
@@ -27,7 +27,7 @@ import {
   world,
 } from "./harness";
 
-afterEach(removeScratch);
+afterEach(removeScratchDirs);
 
 test("AC-30 each worktree gets the lowest free block as WORKTREE_PORT, shown by ls; the primary gets none", async () => {
   const w = world();

@@ -8,7 +8,7 @@ import {
   ls,
   project,
   refused,
-  removeScratch,
+  removeScratchDirs,
   run,
   runProgram,
   succeeded,
@@ -16,7 +16,7 @@ import {
   world,
 } from "./harness";
 
-afterEach(removeScratch);
+afterEach(removeScratchDirs);
 
 const SCRATCH_VARIABLES = ["HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME"];
 

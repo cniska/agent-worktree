@@ -37,13 +37,18 @@ export type World = {
 
 const scratchDirs: string[] = [];
 
-export function removeScratch(): void {
+function scratchDir(): string {
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), "agent-worktree-acceptance-")));
+  scratchDirs.push(dir);
+  return dir;
+}
+
+export function removeScratchDirs(): void {
   for (const dir of scratchDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 }
 
 export function world(): World {
-  const root = realpathSync(mkdtempSync(join(tmpdir(), "agent-worktree-acceptance-")));
-  scratchDirs.push(root);
+  const root = scratchDir();
   const home = join(root, "home");
   const xdg = { XDG_DATA_HOME: "data", XDG_CONFIG_HOME: "config", XDG_STATE_HOME: "state" };
   for (const dir of [home, ...Object.values(xdg).map((name) => join(root, name))]) mkdirSync(dir);

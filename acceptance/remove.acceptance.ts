@@ -12,13 +12,13 @@ import {
   recorded,
   recording,
   refused,
-  removeScratch,
+  removeScratchDirs,
   run,
   succeeded,
   world,
 } from "./harness";
 
-afterEach(removeScratch);
+afterEach(removeScratchDirs);
 
 test("AC-10 remove tears down in the primary, removes the worktree and keeps a branch no remote tracks", () => {
   const w = world();
