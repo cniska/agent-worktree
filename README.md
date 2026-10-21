@@ -12,7 +12,37 @@ agent-worktree never works out what a checkout needs: `agent-worktree install` w
 
 ## Install
 
-agent-worktree runs on [Bun](https://bun.sh), which [mise](https://mise.jdx.dev) installs for it. With mise installed:
+Install the `agent-worktree` command for macOS on Apple silicon or Linux on x64 through one of these channels.
+
+With the release's installer:
+
+```bash
+curl -fsSL https://github.com/cniska/agent-worktree/releases/latest/download/install.sh | sh
+```
+
+With Homebrew:
+
+```bash
+brew install cniska/tap/agent-worktree
+```
+
+With npm:
+
+```bash
+npm install -g @cniska/agent-worktree
+```
+
+With Bun:
+
+```bash
+bun add -g @cniska/agent-worktree
+```
+
+The curl line installs `~/.local/bin/agent-worktree` and, when that directory is not on your `PATH`, adds it to `~/.zshrc` for zsh or to an existing `~/.bashrc` or `~/.bash_profile` for bash, and otherwise asks you to add it. Each channel updates the way it installed: `brew upgrade agent-worktree`, `npm update -g @cniska/agent-worktree`, `bun update -g @cniska/agent-worktree`, or the curl line run again.
+
+### From a clone
+
+To run agent-worktree from source instead, clone it. It runs on [Bun](https://bun.sh), which [mise](https://mise.jdx.dev) installs for it. With mise installed:
 
 ```bash
 git clone https://github.com/cniska/agent-worktree.git

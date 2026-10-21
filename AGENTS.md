@@ -1,6 +1,6 @@
 # agent-worktree
 
-Owns the lifecycle of a task checkout: a git worktree the project's own setup and teardown hooks set up and tear down, which Claude Code reaches through the `cniska-worktree` plugin. [`SPEC.md`](SPEC.md) states what must hold and is the source of truth; it changes in the same commit as the behavior it describes. [`README.md`](README.md) has the install and the essential commands, [`docs/commands.md`](docs/commands.md) every command and its branch rules, and [`docs/releasing.md`](docs/releasing.md) how a release is cut: the first (v0.1.0) by hand, as its "The first release" says, and every later one through `scripts/release.sh <patch|minor|major>`, run by `cniska-skills:ship`.
+Owns the lifecycle of a task checkout: a git worktree the project's own setup and teardown hooks set up and tear down, which Claude Code reaches through the `cniska-worktree` plugin. [`SPEC.md`](SPEC.md) states what must hold and is the source of truth; it changes in the same commit as the behavior it describes. [`README.md`](README.md) has the install and the essential commands, [`docs/commands.md`](docs/commands.md) every command and its branch rules, and [`docs/releasing.md`](docs/releasing.md) how a release is cut, through `scripts/release.sh <patch|minor|major>`, run by `cniska-skills:ship`.
 
 [`src/README.md`](src/README.md) maps the modules and the boundaries between them.
 

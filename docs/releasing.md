@@ -6,44 +6,10 @@ A release never updates itself. Each channel updates the way it installed: `brew
 
 ## The owner's setup, once
 
-Step 4 comes before the first tag. Steps 1 to 3 need the first release's files, so they come in the first release's step 1.
-
 1. Publish each npm package once by hand, so trusted publishing can be set on it: `@cniska/agent-worktree-darwin-arm64`, `@cniska/agent-worktree-linux-x64`, then `@cniska/agent-worktree`. Build them from the first release's files with `bun scripts/build-npm.ts <release files> dist/npm`, then `npm publish ./dist/npm/<package> --access public` for each.
 2. On npmjs.com, add a trusted publisher to each of the three packages: GitHub Actions, repository `cniska/agent-worktree`, workflow `release.yml`. Later releases publish with no npm token.
 3. In each package's settings on npmjs.com, require two-factor authentication and disallow tokens, so only the trusted publisher can publish.
 4. In `cniska/agent-worktree`'s Actions secrets, add `AGENT_WORKTREE_TAP_DISPATCH_TOKEN`: a fine-grained token on `cniska/homebrew-tap` with Contents read and write, which the `homebrew` job uses to dispatch the repin.
-
-## The first release
-
-`package.json` already reads `0.1.0`, so the first release is a tag, not `scripts/release.sh`.
-
-1. `git tag -m v0.1.0 v0.1.0 && git push origin v0.1.0`, and watch the workflow. The npm job fails on a package not yet set up for trusted publishing: do setup steps 1 to 3 from the release's files, then re-run the failed npm job together with the smoke jobs that wait on it.
-2. In `cniska/homebrew-tap`, on the `agent-worktree-formula` branch, which adds `Formula/agent-worktree.rb` and its README section, repin the formula to the release before merging, so `main` never pins checksums of a build no release holds: download the release's `SHA256SUMS.txt`, run `python3 scripts/bump-formula.py Formula/agent-worktree.rb cniska/agent-worktree SHA256SUMS.txt v0.1.0`, commit, then merge. `brew install cniska/tap/agent-worktree` installs it. From the next release on, the `homebrew` job's dispatch repins it.
-3. Land the channel lines in `README.md`'s Install section, above the clone steps, each in its own block under a short label, and after them a sentence saying each channel updates itself as above:
-
-   curl:
-
-   ```bash
-   curl -fsSL https://github.com/cniska/agent-worktree/releases/latest/download/install.sh | sh
-   ```
-
-   Homebrew:
-
-   ```bash
-   brew install cniska/tap/agent-worktree
-   ```
-
-   npm:
-
-   ```bash
-   npm install -g @cniska/agent-worktree
-   ```
-
-   Bun:
-
-   ```bash
-   bun add -g @cniska/agent-worktree
-   ```
 
 ## Each later release
 
