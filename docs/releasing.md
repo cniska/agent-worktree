@@ -9,7 +9,7 @@ A release never updates itself. Each channel updates the way it installed: `brew
 1. Publish each npm package once by hand, so trusted publishing can be set on it: `@cniska/agent-worktree-darwin-arm64`, `@cniska/agent-worktree-linux-x64`, then `@cniska/agent-worktree`. Build them from the first release's files with `bun scripts/build-npm.ts <release files> dist/npm`, then `npm publish ./dist/npm/<package> --access public` for each.
 2. On npmjs.com, add a trusted publisher to each of the three packages: GitHub Actions, repository `cniska/agent-worktree`, workflow `release.yml`. Later releases publish with no npm token.
 3. In each package's settings on npmjs.com, require two-factor authentication and disallow tokens, so only the trusted publisher can publish.
-4. In `cniska/agent-worktree`'s Actions secrets, add `AGENT_WORKTREE_TAP_DISPATCH_TOKEN`: a fine-grained token on `cniska/homebrew-tap` with Contents read and write, which the `homebrew` job uses to dispatch the repin.
+4. In `cniska/agent-worktree`'s Actions secrets, add `TAP_DISPATCH_TOKEN`: a fine-grained token on `cniska/homebrew-tap` with Contents read and write, which the `homebrew` job uses to dispatch the repin.
 
 ## Each later release
 
