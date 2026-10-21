@@ -36,7 +36,7 @@ case " $builds " in
   *" $target "*) ;;
   *) refuse \
     "$name ships no build for $target, only $(printf '%s' "$builds" | sed 's/ / and /g')" \
-    "build $name from source with Bun, as its README says" ;;
+    "build $name from source with Bun, as its docs/development.md says" ;;
 esac
 
 package=$scope/$name-$target

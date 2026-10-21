@@ -4,12 +4,16 @@ Setup, checks, layout and rules, for working on this repo.
 
 ## Setup
 
+agent-worktree runs on [Bun](https://bun.sh), which [mise](https://mise.jdx.dev) installs for it. With mise installed:
+
 ```bash
+git clone https://github.com/cniska/agent-worktree.git
+cd agent-worktree
 mise trust && mise install
 bin/agent-worktree create <name>
 ```
 
-- `mise install` sets up the clone as the [README](../README.md#install) says, and the `bun install` its postinstall runs calls the `prepare` script, which points `core.hooksPath` at `.githooks/`.
+- `mise install` installs Bun and the dependencies, and the `bun install` its postinstall runs calls the `prepare` script, which points `core.hooksPath` at `.githooks/`. Only in the clone, never in a worktree, does it put `agent-worktree` in `~/.bun/bin` with `bun link`, so removing a worktree never leaves the command pointing at a deleted checkout. Add `~/.bun/bin` to your `PATH` if it is not there yet.
 - `bin/agent-worktree create <name>` makes a task worktree and runs the repository's own `.worktree-hooks/setup` in it, which installs the same way without linking the CLI.
 - `.githooks/` holds the commit-subject, format and no-comments gates.
 

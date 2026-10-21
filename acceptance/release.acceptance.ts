@@ -160,7 +160,7 @@ test(
       exitCode: 1,
       stdout: "",
       stderr:
-        "agent-worktree: agent-worktree ships no build for Plan9-mips, only darwin-arm64 and linux-x64\n  build agent-worktree from source with Bun, as its README says\n",
+        "agent-worktree: agent-worktree ships no build for Plan9-mips, only darwin-arm64 and linux-x64\n  build agent-worktree from source with Bun, as its docs/development.md says\n",
     });
 
     expect(runOnPath(w, p.dir, path, ["--version"])).toEqual({

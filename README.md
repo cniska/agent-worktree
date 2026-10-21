@@ -40,18 +40,6 @@ bun add -g @cniska/agent-worktree
 
 The curl line installs `~/.local/bin/agent-worktree` and, when that directory is not on your `PATH`, adds it to `~/.zshrc` for zsh or to an existing `~/.bashrc` or `~/.bash_profile` for bash, and otherwise asks you to add it. Each channel updates the way it installed: `brew upgrade agent-worktree`, `npm update -g @cniska/agent-worktree`, `bun update -g @cniska/agent-worktree`, or the curl line run again.
 
-### From a clone
-
-To run agent-worktree from source instead, clone it. It runs on [Bun](https://bun.sh), which [mise](https://mise.jdx.dev) installs for it. With mise installed:
-
-```bash
-git clone https://github.com/cniska/agent-worktree.git
-cd agent-worktree
-mise trust && mise install
-```
-
-`mise install` installs Bun and the dependencies. In the clone, never in a worktree, it puts `agent-worktree` in `~/.bun/bin` with `bun link`, so removing a worktree never leaves the command pointing at a deleted checkout. Add that directory to your `PATH` if it is not there yet.
-
 Then install the Claude Code plugin:
 
 ```bash

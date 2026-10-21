@@ -118,7 +118,7 @@ describe.each<Layout>(["nested", "hoisted"])("the launcher over the %s layout", 
     const ran = await run(bin, ["--version"], { PATH: `${fakeBin}:${bin}:${SYSTEM_PATH}` });
     expect(refusal(ran)).toEqual([
       "agent-worktree: agent-worktree ships no build for Plan9-mips, only darwin-arm64 and linux-x64",
-      "  build agent-worktree from source with Bun, as its README says",
+      "  build agent-worktree from source with Bun, as its docs/development.md says",
     ]);
   });
 
