@@ -18,6 +18,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: jdx/mise-action@v5
       - run: bun run check
+      - run: actionlint
 
   acceptance:
     name: Acceptance
