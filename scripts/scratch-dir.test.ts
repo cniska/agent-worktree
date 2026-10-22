@@ -8,7 +8,7 @@ const SELF = "scripts/scratch-dir.test.ts";
 
 const SEARCHED_DIRS = ["src", "acceptance", "scripts"];
 
-const OWN_MKDTEMP = /\bmkdtempSync\b/;
+const OWN_MKDTEMP = /\bmkdtemp(?:Sync)?\b/;
 
 const HELPERS = [
   { suffix: ".test.ts", helper: "scratchDir() in src/repo.test-support.ts" },
@@ -33,15 +33,14 @@ function testFiles(): readonly Source[] {
 function ownScratchDirs({ path, text }: Source): readonly string[] {
   const helper = helperFor(path);
   if (helper === null) return [];
-  return text
-    .split("\n")
-    .flatMap((line, index) =>
-      OWN_MKDTEMP.test(line) ? [`${path}:${index + 1} calls mkdtempSync; use ${helper}`] : [],
-    );
+  return text.split("\n").flatMap((line, index) => {
+    const call = OWN_MKDTEMP.exec(line)?.[0];
+    return call === undefined ? [] : [`${path}:${index + 1} calls ${call}; use ${helper}`];
+  });
 }
 
 describe("tests make scratch directories through the shared helpers", () => {
-  test("no test file calls mkdtempSync", () => {
+  test("no test file calls mkdtemp or mkdtempSync", () => {
     expect(testFiles().flatMap(ownScratchDirs)).toEqual([]);
   });
 
@@ -57,14 +56,17 @@ describe("tests make scratch directories through the shared helpers", () => {
   });
 
   test("names the helper a test file and an acceptance file each use, and spares other files", () => {
-    const text = 'import { mkdtempSync } from "node:fs";\nconst dir = fs.mkdtempSync(prefix);\n';
+    const text =
+      'import { mkdtempSync } from "node:fs";\nconst dir = fs.mkdtempSync(prefix);\nconst scratch = await mkdtemp(prefix);\n';
     expect(ownScratchDirs({ path: "src/x.test.ts", text })).toEqual([
       "src/x.test.ts:1 calls mkdtempSync; use scratchDir() in src/repo.test-support.ts",
       "src/x.test.ts:2 calls mkdtempSync; use scratchDir() in src/repo.test-support.ts",
+      "src/x.test.ts:3 calls mkdtemp; use scratchDir() in src/repo.test-support.ts",
     ]);
     expect(ownScratchDirs({ path: "acceptance/x.acceptance.ts", text })).toEqual([
       "acceptance/x.acceptance.ts:1 calls mkdtempSync; use world() in acceptance/harness.ts",
       "acceptance/x.acceptance.ts:2 calls mkdtempSync; use world() in acceptance/harness.ts",
+      "acceptance/x.acceptance.ts:3 calls mkdtemp; use world() in acceptance/harness.ts",
     ]);
     expect(ownScratchDirs({ path: "src/repo.test-support.ts", text })).toEqual([]);
   });
