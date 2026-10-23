@@ -7,7 +7,7 @@
 agent-worktree never works out what a checkout needs: `agent-worktree install` writes the setup and teardown commands and the port count the project gives it into hooks, and agent-worktree runs those.
 
 - `agent-worktree create <name>` makes a git worktree outside the repository, on a new branch cut from `origin`'s default branch as `origin` has it now, runs the project's setup hook in it, and prints its path.
-- `agent-worktree remove <name>` runs the project's teardown hook, removes the worktree, and once its remote's default branch has the branch, deletes it locally and, when it was pushed with an upstream, on that remote. When the upstream holds a commit the branch lacks, it keeps both copies.
+- `agent-worktree remove <name>` runs the project's teardown hook, removes the worktree, and once its remote's default branch has the branch, deletes it locally and on that remote: its upstream or, with none, the branch of the same name on `origin`, other than `origin`'s default branch. When the remote branch holds a commit the branch lacks, it keeps both copies.
 - The `cniska-worktree` Claude Code plugin sends Claude Code's own worktrees through the same commands.
 
 ## Install

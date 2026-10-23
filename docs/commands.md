@@ -7,7 +7,7 @@ The `agent-worktree` commands, where `create` cuts a branch and how `remove` set
 | `agent-worktree create [--from <ref>] <name>` | Create the worktree on branch `<name>`, as [Where `create` cuts a branch](#where-create-cuts-a-branch) says, run setup, print the path. Rerun to resume a failed setup. |
 | `agent-worktree init` | Run setup in the current checkout, primary or task worktree. |
 | `agent-worktree remove [--force] <name>` | Run teardown and remove the worktree, then settle its branch as [How `remove` settles a branch](#how-remove-settles-a-branch) says. Without `--force` a dirty worktree, one with submodules or a failed teardown refuses; a locked worktree always does. |
-| `agent-worktree prune` | Prune git's stale worktree entries, tear down every worktree that is gone but still registered, and remove every clean worktree whose pushed branch landed, other than the one it runs in, settling each one's branch as `remove` does; refuses with the names whose teardown failed. |
+| `agent-worktree prune` | Prune git's stale worktree entries, tear down every worktree that is gone but still registered, and remove every clean worktree whose branch has an upstream and landed, other than the one it runs in, settling each one's branch as `remove` does; refuses with the names whose teardown failed. |
 | `agent-worktree ls` | One line per worktree: name, state, branch, port block, path. |
 | `agent-worktree path <name>` | Print the worktree's path. |
 | `agent-worktree hook` | The plugin's `WorktreeCreate` and `WorktreeRemove` entry: reads the event from stdin. |
@@ -34,8 +34,8 @@ It decides in this order, and the first case that holds settles the branch:
 3. A branch whose remote does not exist, cannot be reached or has no default branch is kept.
 4. A branch that tracks the remote's default branch itself is kept.
 5. A branch that has not landed is kept. It has landed when the default branch has its tip (merged), or when its upstream is gone from the remote and its whole change since the merge base matches one commit already in the default branch (squash-merged), as after a squash merge whose host deleted the branch.
-6. A landed branch whose upstream holds commits the branch lacks is kept.
-7. Any other landed branch is deleted. When its upstream is still on the remote, `remove` deletes that first, and when the remote refuses, the branch is kept. An upstream already gone is no error.
+6. A landed branch whose remote branch holds commits the branch lacks is kept. Its remote branch is its upstream or, with none, the branch of the same name on `origin`, other than `origin`'s default branch, which `remove` never deletes.
+7. Any other landed branch is deleted. When its remote branch is still on the remote, `remove` deletes that first, and when the remote refuses, the branch is kept. An upstream already gone is no error.
 
 `--force` never changes which branch is deleted.
 

@@ -87,7 +87,7 @@ test("AC-25 the usage lists every command, or one with --help", () => {
   const remove = run(w, w.root, ["remove", "--help"]);
   expect(remove).toEqual({ exitCode: 0, stdout: `${lines[2]}\n`, stderr: "" });
   expect(remove.stdout).toContain(
-    "run teardown and remove the worktree; once its remote's default branch has the branch, delete it locally and, when it was pushed with an upstream, on that remote, keeping both copies when the upstream holds a commit the branch lacks",
+    "run teardown and remove the worktree; once its remote's default branch has the branch, delete it locally and on that remote, its upstream or, with none, its same-name branch on origin other than the default branch, keeping both copies when the remote branch holds a commit the branch lacks",
   );
 });
 

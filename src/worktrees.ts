@@ -6,7 +6,7 @@ import {
   type CutBase,
   cutBase,
   fateText,
-  hasPushedAndLanded,
+  hasLandedUpstream,
   type Remotes,
   remotesOf,
   settleBranch,
@@ -460,7 +460,7 @@ function isSweepable(
 ): boolean {
   if (worktree.branch === null || spared.has(worktree.path) || blocker(worktree, false) !== null)
     return false;
-  return hasPushedAndLanded(project.primary, worktree.branch, remotes);
+  return hasLandedUpstream(project.primary, worktree.branch, remotes);
 }
 
 function sweepLanded(project: Project, spared: ReadonlySet<string>, remotes: Remotes): Swept {

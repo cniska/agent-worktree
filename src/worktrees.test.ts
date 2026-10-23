@@ -559,7 +559,7 @@ describe("the branch of a removed worktree", () => {
       branch: "task-a",
       landing: "merged",
       into: "refs/remotes/origin/main",
-      upstream: "refs/remotes/origin/task-a",
+      remoteBranch: "refs/remotes/origin/task-a",
     });
     expect(branches(f)).toBe("");
     expect(git(bare, ["for-each-ref", "--format=%(refname)", "refs/heads"])).toBe("refs/heads/main");
@@ -663,10 +663,14 @@ describe("prune of a worktree whose branch landed", () => {
     expect(git(bare, ["for-each-ref", "--format=%(refname)", "refs/heads"])).toBe("refs/heads/main");
   });
 
-  test("keeps one never pushed, one dirty, one unmerged, one locked and the one prune runs in", async () => {
+  test("keeps one never pushed, one landed with no upstream, one dirty, one unmerged, one locked and the one prune runs in", async () => {
     const f = fixture({ teardown: TOUCH_TEARDOWN_RECORD });
     withRemote(f.dir, "origin");
     const fresh = await create(f.project, f.name("task-a"), { here: f.dir, from: null });
+    const noUpstream = await create(f.project, f.name("task-f"), { here: f.dir, from: null });
+    commitIn(noUpstream, "task-f-work");
+    git(noUpstream, ["push", "-q", "origin", "task-f"]);
+    git(noUpstream, ["push", "-q", "origin", "task-f:main"]);
     const dirty = await create(f.project, f.name("task-b"), { here: f.dir, from: null });
     land(dirty, "task-b");
     writeFileSync(join(dirty, "scratch"), "untracked");
@@ -686,8 +690,9 @@ describe("prune of a worktree whose branch landed", () => {
       ["task-c", "ready"],
       ["task-d", "ready"],
       ["task-e", "ready"],
+      ["task-f", "ready"],
     ]);
-    expect([fresh, dirty, unmerged, locked, here].every((path) => existsSync(path))).toBe(true);
+    expect([fresh, noUpstream, dirty, unmerged, locked, here].every((path) => existsSync(path))).toBe(true);
   });
 
   test("keeps one git refuses to remove after its teardown, refusing with why, and removes the next", async () => {

@@ -122,15 +122,52 @@ function land(w: ReturnType<typeof world>, checkout: string, branch: string): vo
   git(w, checkout, ["push", "-q", "origin", `${branch}:main`]);
 }
 
-test("AC-42 prune removes a clean worktree whose pushed branch landed, and keeps the rest", () => {
+test("AC-56 remove deletes a landed branch pushed without an upstream on origin too, keeps both copies when origin's holds more, and never deletes origin's default branch", () => {
+  const w = world();
+  const p = project(w);
+  const bare = bareRemote(w, p.dir);
+  git(w, bare, ["config", "receive.denyDeleteCurrent", "ignore"]);
+  git(w, p.dir, ["checkout", "-q", "--detach"]);
+  for (const name of ["main", "task-a", "task-b"]) succeeded(run(w, p.dir, ["create", name]));
+  expect(succeeded(run(w, p.dir, ["remove", "main"]))).toEqual([
+    "branch main deleted, merged into origin/main",
+  ]);
+  expect(remoteHeads(w, bare)).toBe("main");
+  commitIn(w, p.path("task-a"), "landed");
+  git(w, p.path("task-a"), ["push", "-q", "origin", "task-a"]);
+  git(w, p.path("task-a"), ["push", "-q", "origin", "task-a:main"]);
+  expect(succeeded(run(w, p.dir, ["remove", "task-a"]))).toEqual([
+    "branch task-a deleted, merged into origin/main, and origin/task-a deleted",
+  ]);
+  expect(remoteHeads(w, bare)).toBe("main");
+  commitIn(w, p.path("task-b"), "landed-too");
+  git(w, p.path("task-b"), ["pull", "-q", "--no-rebase", "--no-edit", "origin", "main"]);
+  git(w, p.path("task-b"), ["push", "-q", "origin", "task-b"]);
+  git(w, p.path("task-b"), ["push", "-q", "origin", "task-b:main"]);
+  const elsewhere = join(w.root, "clones", "elsewhere");
+  git(w, w.root, ["clone", "-q", "-b", "task-b", bare, elsewhere]);
+  commitIn(w, elsewhere, "remote-only");
+  git(w, elsewhere, ["push", "-q", "origin", "task-b"]);
+  expect(succeeded(run(w, p.dir, ["remove", "task-b"]))).toEqual([
+    "branch task-b kept, origin/task-b has commits it lacks",
+  ]);
+  expect(remoteHeads(w, bare)).toBe("main\ntask-b");
+  expect(branches(w, p.dir)).toBe("task-b");
+});
+
+test("AC-42 prune removes a clean worktree whose branch has an upstream and landed, and keeps the rest", () => {
   const w = world();
   const p = project(w);
   const bare = bareRemote(w, p.dir);
   const record = join(w.root, "teardown-record");
   installHook(w, p.dir, "teardown", recording(record));
-  const names = ["task-a", "task-b", "task-c", "task-d", "task-e", "task-f"];
+  const names = ["task-a", "task-b", "task-c", "task-d", "task-e", "task-f", "task-g"];
   for (const name of names) succeeded(run(w, p.dir, ["create", name]));
   land(w, p.path("task-a"), "task-a");
+  commitIn(w, p.path("task-g"), "no-upstream");
+  git(w, p.path("task-g"), ["pull", "-q", "--no-rebase", "--no-edit", "origin", "main"]);
+  git(w, p.path("task-g"), ["push", "-q", "origin", "task-g"]);
+  git(w, p.path("task-g"), ["push", "-q", "origin", "task-g:main"]);
   land(w, p.path("task-c"), "task-c");
   writeFileSync(join(p.path("task-c"), "untracked"), "work\n");
   commitIn(w, p.path("task-d"), "unmerged");
@@ -146,7 +183,7 @@ test("AC-42 prune removes a clean worktree whose pushed branch landed, and keeps
   );
   expect(recorded(record).map(({ name }) => name)).toEqual(["task-a"]);
   expect(existsSync(p.path("task-a"))).toBe(false);
-  expect(remoteHeads(w, bare)).toBe("main\ntask-c\ntask-d\ntask-e\ntask-f");
+  expect(remoteHeads(w, bare)).toBe("main\ntask-c\ntask-d\ntask-e\ntask-f\ntask-g");
   expect(ls(w, p.dir).map(({ name, state }) => [name, state])).toEqual(
     names.slice(1).map((name) => [name, "ready"]),
   );

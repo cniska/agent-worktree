@@ -1,5 +1,6 @@
 import { unreachable } from "./assert";
 import {
+  branchRef,
   branchTip,
   commitOf,
   deleteBranchAt,
@@ -27,7 +28,7 @@ export type BranchFate =
       readonly branch: string;
       readonly landing: Landing;
       readonly into: string;
-      readonly upstream: string | null;
+      readonly remoteBranch: string | null;
     }
   | { readonly kind: "unmerged"; readonly branch: string; readonly into: string }
   | { readonly kind: "no_remote"; readonly branch: string; readonly remote: string }
@@ -39,11 +40,11 @@ export type BranchFate =
     }
   | { readonly kind: "no_default_branch"; readonly branch: string; readonly remote: string }
   | { readonly kind: "tracks_default"; readonly branch: string; readonly into: string }
-  | { readonly kind: "upstream_ahead"; readonly branch: string; readonly upstream: string }
+  | { readonly kind: "remote_branch_ahead"; readonly branch: string; readonly remoteBranch: string }
   | {
-      readonly kind: "upstream_kept";
+      readonly kind: "remote_branch_kept";
       readonly branch: string;
-      readonly upstream: string;
+      readonly remoteBranch: string;
       readonly detail: string;
     }
   | { readonly kind: "checked_out"; readonly branch: string; readonly at: string };
@@ -119,25 +120,48 @@ function landingOf(repo: string, tip: string, into: string, upstreamGone: boolea
   return null;
 }
 
-type UpstreamPlan =
+type RemotePlan =
   | { readonly kind: "none" }
   | { readonly kind: "gone"; readonly tracking: string }
   | { readonly kind: "ahead"; readonly tracking: string }
-  | { readonly kind: "delete"; readonly tracking: string; readonly target: RemoteBranch };
+  | {
+      readonly kind: "delete";
+      readonly tracking: string;
+      readonly target: RemoteBranch;
+      readonly hasUpstream: boolean;
+    };
 
-function upstreamPlan(
+function remoteBranchPlan(
   repo: string,
-  upstream: Upstream | null,
-  heads: ReadonlyMap<string, string>,
+  remote: string,
+  ref: string,
+  remoteTip: string,
   tip: string,
-): UpstreamPlan {
-  if (upstream === null) return { kind: "none" };
-  const tracking = trackingRef(upstream.remote, upstream.ref);
-  const remoteTip = heads.get(upstream.ref);
-  if (remoteTip === undefined) return { kind: "gone", tracking };
+  hasUpstream: boolean,
+): RemotePlan {
+  const tracking = trackingRef(remote, ref);
   if (commitOf(repo, remoteTip) === null || !isAncestor(repo, remoteTip, tip))
     return { kind: "ahead", tracking };
-  return { kind: "delete", tracking, target: { remote: upstream.remote, ref: upstream.ref, tip: remoteTip } };
+  return { kind: "delete", tracking, target: { remote, ref, tip: remoteTip }, hasUpstream };
+}
+
+function remotePlan(
+  repo: string,
+  branch: string,
+  upstream: Upstream | null,
+  remote: string,
+  view: Extract<RemoteView, { readonly kind: "reached" }>,
+  tip: string,
+): RemotePlan {
+  if (upstream === null) {
+    const ref = branchRef(branch);
+    const remoteTip = view.heads.get(ref);
+    if (ref === view.defaultRef || remoteTip === undefined) return { kind: "none" };
+    return remoteBranchPlan(repo, remote, ref, remoteTip, tip, false);
+  }
+  const remoteTip = view.heads.get(upstream.ref);
+  if (remoteTip === undefined) return { kind: "gone", tracking: trackingRef(remote, upstream.ref) };
+  return remoteBranchPlan(repo, remote, upstream.ref, remoteTip, tip, true);
 }
 
 type Verdict =
@@ -148,8 +172,21 @@ type Verdict =
       readonly tip: string;
       readonly landing: Landing;
       readonly into: string;
-      readonly plan: Exclude<UpstreamPlan, { readonly kind: "ahead" }>;
+      readonly plan: Exclude<RemotePlan, { readonly kind: "ahead" }>;
     };
+
+function isFromUpstream(plan: Exclude<RemotePlan, { readonly kind: "ahead" }>): boolean {
+  switch (plan.kind) {
+    case "none":
+      return false;
+    case "gone":
+      return true;
+    case "delete":
+      return plan.hasUpstream;
+    default:
+      return unreachable(plan);
+  }
+}
 
 function kept(fate: BranchFate): Verdict {
   return { kind: "kept", fate };
@@ -174,16 +211,17 @@ function judge(repo: string, branch: string, remotes: Remotes): Verdict {
   if (upstream !== null && upstream.ref === view.defaultRef)
     return kept({ kind: "tracks_default", branch, into: view.into });
   const tip = branchTip(repo, branch);
-  const plan = upstreamPlan(repo, upstream, view.heads, tip);
+  const plan = remotePlan(repo, branch, upstream, remote, view, tip);
   const landing = landingOf(repo, tip, view.into, plan.kind === "gone");
   if (landing === null) return kept({ kind: "unmerged", branch, into: view.into });
-  if (plan.kind === "ahead") return kept({ kind: "upstream_ahead", branch, upstream: plan.tracking });
+  if (plan.kind === "ahead")
+    return kept({ kind: "remote_branch_ahead", branch, remoteBranch: plan.tracking });
   return { kind: "landed", branch, tip, landing, into: view.into, plan };
 }
 
-export function hasPushedAndLanded(repo: string, branch: string, remotes: Remotes): boolean {
+export function hasLandedUpstream(repo: string, branch: string, remotes: Remotes): boolean {
   const verdict = judge(repo, branch, remotes);
-  return verdict.kind === "landed" && verdict.plan.kind !== "none";
+  return verdict.kind === "landed" && isFromUpstream(verdict.plan);
 }
 
 export function settleBranch(repo: string, branch: string | null, remotes: Remotes): BranchFate {
@@ -196,12 +234,12 @@ export function settleBranch(repo: string, branch: string | null, remotes: Remot
   if (plan.kind === "delete") {
     const deleted = remotes.deleteBranch(plan.target);
     if (deleted.kind === "failed")
-      return { kind: "upstream_kept", branch, upstream: plan.tracking, detail: deleted.detail };
+      return { kind: "remote_branch_kept", branch, remoteBranch: plan.tracking, detail: deleted.detail };
   }
   deleteBranchAt(repo, branch, tip);
   if (plan.kind === "gone") deleteRef(repo, plan.tracking);
-  const upstreamDeleted = plan.kind === "delete" ? plan.tracking : null;
-  return { kind: "deleted", branch, landing, into, upstream: upstreamDeleted };
+  const remoteBranchDeleted = plan.kind === "delete" ? plan.tracking : null;
+  return { kind: "deleted", branch, landing, into, remoteBranch: remoteBranchDeleted };
 }
 
 function shortRef(ref: string): string {
@@ -213,8 +251,8 @@ export function fateText(fate: BranchFate): string {
     case "detached":
       return "detached";
     case "deleted": {
-      const upstream = fate.upstream === null ? "" : `, and ${shortRef(fate.upstream)} deleted`;
-      return `branch ${fate.branch} deleted, ${fate.landing} into ${shortRef(fate.into)}${upstream}`;
+      const remoteBranch = fate.remoteBranch === null ? "" : `, and ${shortRef(fate.remoteBranch)} deleted`;
+      return `branch ${fate.branch} deleted, ${fate.landing} into ${shortRef(fate.into)}${remoteBranch}`;
     }
     case "unmerged":
       return `branch ${fate.branch} kept, not merged into ${shortRef(fate.into)}`;
@@ -226,10 +264,10 @@ export function fateText(fate: BranchFate): string {
       return `branch ${fate.branch} kept, ${fate.remote} has no default branch`;
     case "tracks_default":
       return `branch ${fate.branch} kept, it tracks ${shortRef(fate.into)}`;
-    case "upstream_ahead":
-      return `branch ${fate.branch} kept, ${shortRef(fate.upstream)} has commits it lacks`;
-    case "upstream_kept":
-      return `branch ${fate.branch} kept, deleting ${shortRef(fate.upstream)} failed: ${fate.detail}`;
+    case "remote_branch_ahead":
+      return `branch ${fate.branch} kept, ${shortRef(fate.remoteBranch)} has commits it lacks`;
+    case "remote_branch_kept":
+      return `branch ${fate.branch} kept, deleting ${shortRef(fate.remoteBranch)} failed: ${fate.detail}`;
     case "checked_out":
       return `branch ${fate.branch} kept, checked out at ${fate.at}`;
     default:

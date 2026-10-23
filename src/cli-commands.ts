@@ -110,7 +110,7 @@ const removeCommand: Command = {
   name: "remove",
   usage: "agent-worktree remove [--force] <name>",
   summary:
-    "run teardown and remove the worktree; once its remote's default branch has the branch, delete it locally and, when it was pushed with an upstream, on that remote, keeping both copies when the upstream holds a commit the branch lacks",
+    "run teardown and remove the worktree; once its remote's default branch has the branch, delete it locally and on that remote, its upstream or, with none, its same-name branch on origin other than the default branch, keeping both copies when the remote branch holds a commit the branch lacks",
   options: { force: { type: "boolean" } },
   async run(positionals, values) {
     const target = namedTarget(positionals, this);
@@ -122,7 +122,7 @@ const pruneCommand: Command = {
   name: "prune",
   usage: "agent-worktree prune",
   summary:
-    "prune git's stale worktree entries, tear down every registered worktree that is gone, and remove every one whose pushed branch landed",
+    "prune git's stale worktree entries, tear down every registered worktree that is gone, and remove every one whose branch has an upstream and landed",
   options: {},
   async run(positionals) {
     noPositionals(positionals, this);

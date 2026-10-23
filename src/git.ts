@@ -105,8 +105,12 @@ function foundOrFault(repo: string, args: readonly string[]): GitRun | null {
   throw refuse("git_failed", { repo, command: described(args), exit: run.exit, detail: run.err });
 }
 
+export function branchRef(branch: string): string {
+  return `refs/heads/${branch}`;
+}
+
 export function branchExists(repo: string, name: string): boolean {
-  return foundOrFault(repo, ["show-ref", "--verify", "--quiet", `refs/heads/${name}`]) !== null;
+  return foundOrFault(repo, ["show-ref", "--verify", "--quiet", branchRef(name)]) !== null;
 }
 
 export function isDirty(worktree: string): boolean {
@@ -265,7 +269,7 @@ export function isSquashLanded(repo: string, tip: string, into: string): boolean
 }
 
 export function branchTip(repo: string, branch: string): string {
-  return gitOutput(repo, ["rev-parse", "--verify", `refs/heads/${branch}^{commit}`]);
+  return gitOutput(repo, ["rev-parse", "--verify", `${branchRef(branch)}^{commit}`]);
 }
 
 export function isAncestor(repo: string, commit: string, ref: string): boolean {
@@ -279,7 +283,7 @@ function hasBranchConfig(repo: string, branch: string): boolean {
 }
 
 export function deleteBranchAt(repo: string, branch: string, tip: string): void {
-  gitOutput(repo, ["update-ref", "-d", `refs/heads/${branch}`, tip]);
+  gitOutput(repo, ["update-ref", "-d", branchRef(branch), tip]);
   if (hasBranchConfig(repo, branch)) gitOutput(repo, ["config", "--remove-section", `branch.${branch}`]);
 }
 

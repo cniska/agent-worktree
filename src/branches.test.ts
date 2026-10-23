@@ -60,7 +60,7 @@ describe("a landed branch", () => {
       branch: "task-a",
       landing: "merged",
       into: "refs/remotes/origin/main",
-      upstream: "refs/remotes/origin/task-a",
+      remoteBranch: "refs/remotes/origin/task-a",
     });
     expect(localBranches(dir)).toBe("");
     expect(remoteHeads(bare)).toBe("refs/heads/main");
@@ -80,7 +80,7 @@ describe("a landed branch", () => {
       branch: "task-a",
       landing: "merged",
       into: "refs/remotes/origin/main",
-      upstream: null,
+      remoteBranch: null,
     });
     expect(fateText(fate)).toBe("branch task-a deleted, merged into origin/main");
     expect(localBranches(dir)).toBe("");
@@ -102,14 +102,39 @@ describe("a landed branch", () => {
     expect(localBranches(dir)).toBe("");
   });
 
-  test("with no upstream is deleted here when the default branch has its tip, and nothing is deleted on the remote", () => {
+  test("with no upstream is deleted here and on the remote, whose same-name branch holds nothing it lacks", () => {
     const dir = repo();
     const bare = withRemote(dir, "origin");
     git(bare, ["branch", "task-a", "main"]);
     topic(dir, "task-a", "work");
     git(dir, ["push", "-q", "origin", "task-a:main"]);
-    expect(settle(dir, "task-a")).toMatchObject({ kind: "deleted", upstream: null });
-    expect(remoteHeads(bare)).toBe("refs/heads/main\nrefs/heads/task-a");
+    expect(settle(dir, "task-a")).toMatchObject({
+      kind: "deleted",
+      remoteBranch: "refs/remotes/origin/task-a",
+    });
+    expect(remoteHeads(bare)).toBe("refs/heads/main");
+  });
+
+  test("with no upstream, pushed by name and landed, is deleted here and on the remote", () => {
+    const dir = repo();
+    const bare = withRemote(dir, "origin");
+    topic(dir, "task-a", "work");
+    git(dir, ["push", "-q", "origin", "task-a"]);
+    git(dir, ["push", "-q", "origin", "task-a:main"]);
+    expect(fateText(settle(dir, "task-a"))).toBe(
+      "branch task-a deleted, merged into origin/main, and origin/task-a deleted",
+    );
+    expect(localBranches(dir)).toBe("");
+    expect(remoteHeads(bare)).toBe("refs/heads/main");
+  });
+
+  test("named as the remote's default branch, with no upstream, is deleted here while the remote's is kept", () => {
+    const dir = repo();
+    const bare = withRemote(dir, "origin");
+    git(bare, ["config", "receive.denyDeleteCurrent", "ignore"]);
+    git(dir, ["checkout", "-q", "--detach"]);
+    expect(fateText(settle(dir, "main"))).toBe("branch main deleted, merged into origin/main");
+    expect(remoteHeads(bare)).toBe("refs/heads/main");
   });
 
   test("whose upstream has another name has that upstream deleted", () => {
@@ -144,7 +169,7 @@ describe("a landed branch", () => {
     expect(settle(dir, "task-a")).toMatchObject({
       kind: "deleted",
       into: "refs/remotes/fork/main",
-      upstream: "refs/remotes/fork/task-a",
+      remoteBranch: "refs/remotes/fork/task-a",
     });
     expect(remoteHeads(fork)).toBe("refs/heads/main");
   });
@@ -201,6 +226,22 @@ describe("a branch kept", () => {
     const bare = withRemote(dir, "origin");
     const tip = topic(dir, "task-a", "work");
     git(dir, ["push", "-q", "-u", "origin", "task-a"]);
+    landElsewhere(bare, "task-a");
+    const clone = join(scratchDir(), "ahead");
+    git(scratchDir(), ["clone", "-q", "-b", "task-a", bare, clone]);
+    commit(clone, "later");
+    git(clone, ["push", "-q", "origin", "task-a"]);
+    const fate = settle(dir, "task-a");
+    expect(fateText(fate)).toBe("branch task-a kept, origin/task-a has commits it lacks");
+    expect(git(dir, ["rev-parse", "task-a"])).toBe(tip);
+    expect(remoteHeads(bare)).toBe("refs/heads/main\nrefs/heads/task-a");
+  });
+
+  test("with no upstream when the remote's same-name branch has commits it lacks", () => {
+    const dir = repo();
+    const bare = withRemote(dir, "origin");
+    const tip = topic(dir, "task-a", "work");
+    git(dir, ["push", "-q", "origin", "task-a"]);
     landElsewhere(bare, "task-a");
     const clone = join(scratchDir(), "ahead");
     git(scratchDir(), ["clone", "-q", "-b", "task-a", bare, clone]);
