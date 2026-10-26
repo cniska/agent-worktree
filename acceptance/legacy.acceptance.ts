@@ -36,9 +36,7 @@ test("AC-21 a worktree in the earlier location is listed as legacy and refused b
   installHook(w, p.dir, "teardown", recording(record));
   const old = earlier(w, p, "task-a");
   const target = p.path("task-a");
-  const listed: readonly Listed[] = [
-    { name: "task-a", state: "legacy (move or drop)", branch: "task-a", path: old },
-  ];
+  const listed: readonly Listed[] = [{ name: "task-a", state: "legacy", branch: "task-a", path: old }];
   expect(ls(w, p.dir)).toEqual(listed);
   const legacy = {
     message: `task-a is at ${old}, inside the primary checkout, where agent-worktree no longer keeps worktrees`,
@@ -51,7 +49,7 @@ test("AC-21 a worktree in the earlier location is listed as legacy and refused b
   const stdin = hookEvent({ hook_event_name: "WorktreeRemove", worktree_path: old });
   expect(refused(run(w, old, ["hook"], { stdin }), "hook")).toEqual(legacy);
   expect(existsSync(old)).toBe(true);
-  expect(succeeded(run(w, p.dir, ["prune"]))).toEqual([]);
+  expect(succeeded(run(w, p.dir, ["prune"]))).toBeNull();
   expect(recorded(record)).toEqual([]);
   expect(ls(w, p.dir)).toEqual(listed);
 });
@@ -65,18 +63,18 @@ test("AC-22 the keep and drop acts converge a worktree in the earlier location",
   const target = p.path("task-a");
   mkdirSync(dirname(target), { recursive: true });
   git(w, p.dir, ["worktree", "move", kept, target]);
-  expect(succeeded(run(w, target, ["init"]))).toEqual([]);
+  expect(succeeded(run(w, target, ["init"]))).toBeNull();
   expect(ls(w, p.dir)).toEqual([{ name: "task-a", state: "ready", branch: "task-a", path: target }]);
 
   const dropped = earlier(w, p, "task-b");
   git(w, p.dir, ["worktree", "remove", dropped]);
-  expect(succeeded(run(w, p.dir, ["prune"], { env: { WORKTREE_PATH: "/inherited" } }))).toEqual([]);
+  expect(succeeded(run(w, p.dir, ["prune"], { env: { WORKTREE_PATH: "/inherited" } }))).toBeNull();
   expect(recorded(record)).toEqual([{ name: "task-b", path: "unset", primary: p.dir, cwd: p.dir }]);
   expect(ls(w, p.dir).map(({ name }) => name)).toEqual(["task-a"]);
 
   const deleted = earlier(w, p, "task-c");
   rmSync(deleted, { recursive: true });
-  expect(succeeded(run(w, p.dir, ["prune"]))).toEqual([]);
+  expect(succeeded(run(w, p.dir, ["prune"]))).toBeNull();
   expect(recorded(record)).toEqual([
     { name: "task-b", path: "unset", primary: p.dir, cwd: p.dir },
     { name: "task-c", path: deleted, primary: p.dir, cwd: p.dir },
@@ -92,7 +90,7 @@ test("AC-23 an unregistered directory in the earlier location is not agent-workt
   const stray = join(p.dir, ".claude", "worktrees", "task-a");
   git(w, p.dir, ["worktree", "add", "-q", stray, "-b", "task-a"]);
   expect(ls(w, p.dir)).toEqual([]);
-  expect(succeeded(run(w, p.dir, ["prune"]))).toEqual([]);
+  expect(succeeded(run(w, p.dir, ["prune"]))).toBeNull();
   expect(existsSync(stray)).toBe(true);
   expect(git(w, p.dir, ["worktree", "list", "--porcelain"])).toContain(stray);
   expect(recorded(record)).toEqual([]);

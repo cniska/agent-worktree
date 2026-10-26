@@ -1,9 +1,11 @@
-type ErrorKind = "refusal" | "fault";
+import type { JsonObject } from "@toon-format/toon";
+
+export type ErrorKind = "refusal" | "fault";
 
 export const BUG =
   "stop and hand this error to the owner as a bug in agent-worktree; no command you run resolves it";
 
-export class CodedError<Code extends string = string, Meta extends object = object> extends Error {
+export class CodedError<Code extends string = string, Meta extends JsonObject = JsonObject> extends Error {
   override readonly name = "CodedError";
   readonly code: Code;
   readonly meta: Meta;
@@ -19,7 +21,7 @@ export class CodedError<Code extends string = string, Meta extends object = obje
   }
 }
 
-type ErrorTable<Metas extends Record<string, object>> = {
+type ErrorTable<Metas extends Record<string, JsonObject>> = {
   readonly [Code in keyof Metas]: {
     readonly message: (meta: Metas[Code]) => string;
     readonly resolve: (meta: Metas[Code]) => string;
@@ -27,7 +29,7 @@ type ErrorTable<Metas extends Record<string, object>> = {
 };
 
 function coder(kind: ErrorKind) {
-  return <Metas extends Record<string, object>>(table: ErrorTable<Metas>) =>
+  return <Metas extends Record<string, JsonObject>>(table: ErrorTable<Metas>) =>
     <Code extends keyof Metas & string>(code: Code, meta: Metas[Code]): CodedError<Code, Metas[Code]> =>
       new CodedError(code, table[code].message(meta), meta, table[code].resolve(meta), kind);
 }

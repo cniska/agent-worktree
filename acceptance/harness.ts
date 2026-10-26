@@ -13,6 +13,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
+import { decode, type JsonObject, type JsonValue } from "@toon-format/toon";
 
 const ENTRY = join(import.meta.dir, "..", "src", "cli.ts");
 
@@ -301,29 +302,83 @@ export type Project = { readonly dir: string; path(name: string): string };
 
 export function project(w: World): Project {
   const dir = repo(w);
-  const [probe = ""] = succeeded(run(w, dir, ["path", "probe"]));
+  const probe = printedPath(run(w, dir, ["path", "probe"]));
   const key = keyOf(w, probe);
   return { dir, path: (name) => join(w.data, key, name) };
 }
 
 const ONE_LINE_EACH = /^(?:[^\n]+\n)*$/;
 
-export function succeeded(ran: Ran): readonly string[] {
+export function printedLines(ran: Ran): readonly string[] {
   expect({ exitCode: ran.exitCode, stderr: ran.stderr }).toMatchObject({ exitCode: 0 });
   expect(ran.stdout).toMatch(ONE_LINE_EACH);
   return ran.stdout.split("\n").slice(0, -1);
 }
 
+function isRecord(value: JsonValue): value is JsonObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function record(value: JsonValue | undefined): JsonObject {
+  if (value === undefined || !isRecord(value)) throw new Error(`${JSON.stringify(value)} is not a record`);
+  return value;
+}
+
+function text(value: JsonValue | undefined): string {
+  if (typeof value !== "string") throw new Error(`${JSON.stringify(value)} is not a string`);
+  return value;
+}
+
+function envelope(toon: string): JsonObject {
+  expect(toon).toEndWith("\n");
+  expect(toon).not.toEndWith("\n\n");
+  return record(decode(toon));
+}
+
+export function succeeded(ran: Ran): JsonValue {
+  expect({ exitCode: ran.exitCode, stderr: ran.stderr }).toMatchObject({ exitCode: 0 });
+  const shown = envelope(ran.stdout);
+  expect(shown.ok).toBe(true);
+  expect(Object.keys(shown)).toEqual(["command", "ok", "result"]);
+  return shown.result ?? null;
+}
+
+export function printedPath(ran: Ran): string {
+  const result = record(succeeded(ran));
+  expect(Object.keys(result)).toEqual(["path"]);
+  return text(result.path);
+}
+
+export function removed(ran: Ran): JsonObject {
+  return record(succeeded(ran));
+}
+
 export type Refusal = { readonly message: string; readonly act: string };
 
-const REFUSAL_TAIL = /(?:^|\n)agent-worktree(?: ([a-z]+))?: ([^\n]+)\n {2}([^\n]+)\n$/;
+const ENVELOPE_START = /(?:^|\n)(command: [^\n]*\nok: false\n[\s\S]*)$/;
+
+type Printed = Refusal & { readonly code: string; readonly kind: string };
+
+export function errorOf(ran: Ran, command: string): Printed {
+  const match = ENVELOPE_START.exec(ran.stderr);
+  expect({ stderr: ran.stderr, envelope: match !== null }).toMatchObject({ envelope: true });
+  const shown = envelope(match?.[1] ?? "");
+  expect(shown.command).toBe(command);
+  expect(shown.ok).toBe(false);
+  const error = record(shown.error);
+  expect(Object.keys(error)).toEqual(["kind", "code", "message", "meta", "resolve"]);
+  record(error.meta);
+  return {
+    kind: text(error.kind),
+    code: text(error.code),
+    message: text(error.message),
+    act: text(error.resolve),
+  };
+}
 
 function refusalOf(ran: Ran, exitCode: number, command: string | null): Refusal {
   expect({ exitCode: ran.exitCode, stdout: ran.stdout }).toEqual({ exitCode, stdout: "" });
-  const match = REFUSAL_TAIL.exec(ran.stderr);
-  expect({ stderr: ran.stderr, refusal: match !== null }).toMatchObject({ refusal: true });
-  const [, named, message = "", act = ""] = match ?? [];
-  expect(named ?? null).toBe(command);
+  const { message, act } = errorOf(ran, command ?? "agent-worktree");
   return { message, act };
 }
 
@@ -332,46 +387,59 @@ export function refused(ran: Ran, command: string): Refusal {
 }
 
 export function usageRefused(ran: Ran, command: string | null): Refusal {
-  return refusalOf(ran, 2, command);
+  const refusal = refusalOf(ran, 2, command);
+  expect(errorOf(ran, command ?? "agent-worktree").code).toBe("usage");
+  return refusal;
 }
 
-const STATES = [
-  "ready",
-  "setup pending",
-  "orphaned (prune)",
-  "unlisted",
-  "unmanaged",
-  "legacy (move or drop)",
-] as const;
+const STATES = ["ready", "pending", "orphaned", "unlisted", "unmanaged", "legacy"] as const;
 
 export type Listed = {
   readonly name: string;
   readonly state: (typeof STATES)[number];
-  readonly branch: string;
+  readonly branch: string | null;
   readonly path: string;
 };
 
-function isState(text: string): text is Listed["state"] {
-  return STATES.some((state) => state === text);
+function isState(value: JsonValue | undefined): value is Listed["state"] {
+  return STATES.some((state) => state === value);
 }
 
-type ListedLine = Listed & { readonly ports: string };
+type ListedFull = Listed & { readonly ports: string | null };
 
-function listed(w: World, dir: string): readonly ListedLine[] {
-  return succeeded(run(w, dir, ["ls"])).map((line) => {
-    const fields = line.split("\t");
-    expect(fields).toHaveLength(5);
-    const [name = "", state = "", branch = "", ports = "", path = ""] = fields;
-    if (!isState(state)) throw new Error(`${state} is not a state ls prints`);
-    return { name, state, branch, ports, path };
+function nullable(value: JsonValue | undefined): string | null {
+  return value === null ? null : text(value);
+}
+
+function rows(listing: JsonValue): readonly JsonObject[] {
+  const { worktrees } = record(listing);
+  if (!Array.isArray(worktrees)) throw new Error(`${JSON.stringify(worktrees)} is not a list`);
+  return worktrees.map(record);
+}
+
+function listed(w: World, dir: string): readonly ListedFull[] {
+  const full = succeeded(run(w, dir, ["ls", "--full"]));
+  const brief = succeeded(run(w, dir, ["ls"]));
+  const records = rows(full).map((row) => {
+    expect(Object.keys(row)).toEqual(["name", "state", "branch", "ports", "path"]);
+    const { name, state, branch, ports, path } = row;
+    if (!isState(state)) throw new Error(`${String(state)} is not a state ls prints`);
+    return { name: text(name), state, branch: nullable(branch), ports: nullable(ports), path: text(path) };
   });
+  expect(rows(brief)).toEqual(records.map(({ name, state, path }) => ({ name, state, path })));
+  const counts = Object.fromEntries(
+    STATES.map((state) => [state, records.filter((each) => each.state === state).length] as const),
+  );
+  expect(record(brief).counts).toEqual(counts);
+  expect(record(full).counts).toEqual(counts);
+  return records;
 }
 
 export function ls(w: World, dir: string): readonly Listed[] {
   return listed(w, dir).map(({ name, state, branch, path }) => ({ name, state, branch, path }));
 }
 
-export function lsPorts(w: World, dir: string): Readonly<Record<string, string>> {
+export function lsPorts(w: World, dir: string): Readonly<Record<string, string | null>> {
   return Object.fromEntries(listed(w, dir).map(({ name, ports }) => [name, ports]));
 }
 

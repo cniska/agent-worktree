@@ -24,5 +24,8 @@
     "@types/bun": "^1.4.2",
     "knip": "6.39.0",
     "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "@toon-format/toon": "4.4.0"
   }
 }

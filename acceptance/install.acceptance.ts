@@ -10,6 +10,7 @@ import {
   HOOKS,
   installHook,
   lsPorts,
+  printedPath,
   project,
   recorded,
   recording,
@@ -37,7 +38,7 @@ test("AC-44 install writes the hooks it is given, create and remove run them, an
     succeeded(
       run(w, p.dir, ["install", "--setup", setup, "--teardown", recording(teardownRecord), "--ports", "20"]),
     ),
-  ).toEqual(hooks);
+  ).toEqual({ hooks });
   const [setupHook = "", teardownHook = "", portsHook = ""] = hooks;
   expect(readFileSync(setupHook, "utf8")).toContain(`command='${setup.replaceAll("'", "'\\''")}'`);
   expect(readFileSync(portsHook, "utf8")).toBe("20\n");
@@ -46,7 +47,7 @@ test("AC-44 install writes the hooks it is given, create and remove run them, an
 
   const first = firstRun(await freeUnits(), 2);
   const path = p.path("task-a");
-  expect(succeeded(run(w, p.dir, ["create", "task-a"]))).toEqual([path]);
+  expect(printedPath(run(w, p.dir, ["create", "task-a"]))).toBe(path);
   expect(recorded(setupRecord)).toEqual([{ name: "task-a", path, primary: p.dir, cwd: path }]);
   expect(readFileSync(quoted, "utf8")).toBe(`${first}\n`);
   expect(lsPorts(w, p.dir)).toEqual({ "task-a": blockText(first, 20) });
@@ -62,7 +63,7 @@ test("AC-44 install writes the hooks it is given, create and remove run them, an
   expect(recorded(setupRecord).at(-1)).toEqual({ name: "unset", path: "unset", primary: p.dir, cwd: p.dir });
 
   const setupBefore = readFileSync(setupHook, "utf8");
-  expect(succeeded(run(w, p.dir, ["install", "--teardown", "exit 0"]))).toEqual([teardownHook]);
+  expect(succeeded(run(w, p.dir, ["install", "--teardown", "exit 0"]))).toEqual({ hooks: [teardownHook] });
   expect(readFileSync(teardownHook, "utf8")).toContain("command='exit 0'");
   expect(readFileSync(setupHook, "utf8")).toBe(setupBefore);
   expect(readFileSync(portsHook, "utf8")).toBe("20\n");
@@ -90,18 +91,18 @@ test("AC-46 install --local keeps the hooks in the git directory, and each local
   const local = join(p.dir, ".git", "worktree-hooks");
   expect(
     succeeded(run(w, p.dir, ["install", "--local", "--setup", recording(localRecord), "--ports", "10"])),
-  ).toEqual([join(local, "setup"), join(local, "ports")]);
+  ).toEqual({ hooks: [join(local, "setup"), join(local, "ports")] });
   expect(git(w, p.dir, ["status", "--porcelain"])).toBe("");
 
   const [first] = await freeUnits();
   const path = p.path("task-a");
-  expect(succeeded(run(w, p.dir, ["create", "task-a"]))).toEqual([path]);
+  expect(printedPath(run(w, p.dir, ["create", "task-a"]))).toBe(path);
   expect(recorded(localRecord)).toEqual([{ name: "task-a", path, primary: p.dir, cwd: path }]);
   expect(recorded(committedRecord)).toEqual([]);
   expect(lsPorts(w, p.dir)).toEqual({ "task-a": blockText(first) });
 
   const nested = p.path("task-b");
-  expect(succeeded(run(w, path, ["create", "task-b"]))).toEqual([nested]);
+  expect(printedPath(run(w, path, ["create", "task-b"]))).toBe(nested);
   expect(recorded(localRecord).map(({ name }) => name)).toEqual(["task-a", "task-b"]);
   expect(recorded(committedRecord)).toEqual([]);
 

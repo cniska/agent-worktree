@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { chmodSync, mkdirSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
+import { decode, type JsonObject, type JsonValue } from "@toon-format/toon";
 import { removeScratchDirs, scratchDir } from "../src/repo.test-support";
 import { launcher, PLATFORMS } from "./build-npm";
 
@@ -83,11 +84,30 @@ async function run(
   return { pid: child.pid, status, stdout, stderr };
 }
 
-function refusal(ran: Ran): readonly string[] {
+function isObject(value: JsonValue): value is JsonObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+type Refusal = { readonly code: string; readonly message: string; readonly resolve: string };
+
+function refusal(ran: Ran): Refusal {
   expect([ran.status, ran.stdout]).toEqual([1, ""]);
-  const lines = ran.stderr.split("\n");
-  expect(lines).toHaveLength(3);
-  return lines.slice(0, 2);
+  expect(ran.stderr).toStartWith("command: agent-worktree\nok: false\nerror:\n  kind: refusal\n  code: ");
+  const printed = decode(ran.stderr);
+  expect(printed).toEqual({
+    command: "agent-worktree",
+    ok: false,
+    error: {
+      kind: "refusal",
+      code: expect.any(String),
+      message: expect.any(String),
+      meta: {},
+      resolve: expect.any(String),
+    },
+  });
+  const error = isObject(printed) ? printed.error : undefined;
+  if (error === undefined || !isObject(error)) throw new Error(`${ran.stderr} holds no error`);
+  return { code: String(error.code), message: String(error.message), resolve: String(error.resolve) };
 }
 
 describe.each<Layout>(["nested", "hoisted"])("the launcher over the %s layout", (layout) => {
@@ -106,26 +126,42 @@ describe.each<Layout>(["nested", "hoisted"])("the launcher over the %s layout", 
     const fakeBin = scratchDir();
     executable(join(fakeBin, "uname"), UNSUPPORTED_UNAME);
     const ran = await run(bin, ["--version"], { PATH: `${fakeBin}:${bin}:${SYSTEM_PATH}` });
-    expect(refusal(ran)).toEqual([
-      "agent-worktree: agent-worktree ships no build for Plan9-mips, only darwin-arm64 and linux-x64",
-      "  build agent-worktree from source with Bun, as its docs/development.md says",
-    ]);
+    expect(ran.stderr).toBe(
+      [
+        "command: agent-worktree",
+        "ok: false",
+        "error:",
+        "  kind: refusal",
+        "  code: no_build_for_platform",
+        '  message: "agent-worktree ships no build for Plan9-mips, only darwin-arm64 and linux-x64"',
+        "  meta:",
+        '  resolve: "build agent-worktree from source with Bun, as its docs/development.md says"',
+        "",
+      ].join("\n"),
+    );
+    expect(refusal(ran)).toEqual({
+      code: "no_build_for_platform",
+      message: "agent-worktree ships no build for Plan9-mips, only darwin-arm64 and linux-x64",
+      resolve: "build agent-worktree from source with Bun, as its docs/development.md says",
+    });
   });
 
   test("refuses when the platform package is installed nowhere", async () => {
     const { bin } = prefix(layout, null);
-    expect(refusal(await run(bin, ["--version"]))).toEqual([
-      `agent-worktree: @cniska/agent-worktree-${TARGET} is not installed beside @cniska/agent-worktree`,
-      "  reinstall @cniska/agent-worktree with optional dependencies enabled",
-    ]);
+    expect(refusal(await run(bin, ["--version"]))).toEqual({
+      code: "platform_package_missing",
+      message: `@cniska/agent-worktree-${TARGET} is not installed beside @cniska/agent-worktree`,
+      resolve: "reinstall @cniska/agent-worktree with optional dependencies enabled",
+    });
   });
 
   test("refuses a platform binary that is not executable, naming it", async () => {
     const { bin, stub } = prefix(layout, TARGET);
     chmodSync(stub, 0o644);
-    const [message, resolve] = refusal(await run(bin, ["--version"]));
-    const named = /^agent-worktree: (.+) is not executable$/.exec(message ?? "")?.[1] ?? "";
+    const { code, message, resolve } = refusal(await run(bin, ["--version"]));
+    expect(code).toBe("binary_not_executable");
+    const named = /^(.+) is not executable$/.exec(message)?.[1] ?? "";
     expect(realpathSync(named)).toBe(stub);
-    expect(resolve).toBe("  reinstall @cniska/agent-worktree");
+    expect(resolve).toBe("reinstall @cniska/agent-worktree");
   });
 });

@@ -5,15 +5,18 @@ import { version } from "../package.json";
 import {
   compiledBinary,
   curlServing,
+  errorOf,
+  printedPath,
   project,
   type Ran,
   releaseAssets,
+  removed,
   removeScratchDirs,
   runOnPath,
   runProgram,
   SYSTEM_PATH,
-  succeeded,
   toolsOnly,
+  usageRefused,
   type World,
   world,
 } from "./harness";
@@ -67,11 +70,14 @@ test(
       stdout: `${version}\n`,
       stderr: "",
     });
-    expect(succeeded(runOnPath(w, p.dir, alone, ["create", "task-a"]))).toEqual([p.path("task-a")]);
+    expect(printedPath(runOnPath(w, p.dir, alone, ["create", "task-a"]))).toBe(p.path("task-a"));
     expect(existsSync(p.path("task-a"))).toBe(true);
-    expect(succeeded(runOnPath(w, p.dir, alone, ["remove", "task-a"]))).toEqual([
-      "branch task-a kept, no remote origin",
-    ]);
+    expect(removed(runOnPath(w, p.dir, alone, ["remove", "task-a"]))).toEqual({
+      name: "task-a",
+      branch: "task-a",
+      outcome: "no_remote",
+      remote: "origin",
+    });
     expect(existsSync(p.path("task-a"))).toBe(false);
   },
   BUILD_TIMEOUT_MS,
@@ -154,19 +160,24 @@ test(
       ).not.toBe(0);
     const platformPackage = `@cniska/agent-worktree-${TARGET}`;
 
-    expect(
-      runOnPath(w, p.dir, `${unameSaying(join(w.root, "plan9"), "Plan9", "mips")}:${path}`, ["--version"]),
-    ).toEqual({
-      exitCode: 1,
-      stdout: "",
-      stderr:
-        "agent-worktree: agent-worktree ships no build for Plan9-mips, only darwin-arm64 and linux-x64\n  build agent-worktree from source with Bun, as its docs/development.md says\n",
+    const noBuild = runOnPath(w, p.dir, `${unameSaying(join(w.root, "plan9"), "Plan9", "mips")}:${path}`, [
+      "--version",
+    ]);
+    expect([noBuild.exitCode, noBuild.stdout]).toEqual([1, ""]);
+    expect(errorOf(noBuild, "agent-worktree")).toEqual({
+      kind: "refusal",
+      code: "no_build_for_platform",
+      message: "agent-worktree ships no build for Plan9-mips, only darwin-arm64 and linux-x64",
+      act: "build agent-worktree from source with Bun, as its docs/development.md says",
     });
 
-    expect(runOnPath(w, p.dir, path, ["--version"])).toEqual({
-      exitCode: 1,
-      stdout: "",
-      stderr: `agent-worktree: ${platformPackage} is not installed beside @cniska/agent-worktree\n  reinstall @cniska/agent-worktree with optional dependencies enabled\n`,
+    const missing = runOnPath(w, p.dir, path, ["--version"]);
+    expect([missing.exitCode, missing.stdout]).toEqual([1, ""]);
+    expect(errorOf(missing, "agent-worktree")).toEqual({
+      kind: "refusal",
+      code: "platform_package_missing",
+      message: `${platformPackage} is not installed beside @cniska/agent-worktree`,
+      act: "reinstall @cniska/agent-worktree with optional dependencies enabled",
     });
 
     const nested = join(modules, "agent-worktree", "node_modules", "@cniska", `agent-worktree-${TARGET}`);
@@ -175,9 +186,12 @@ test(
     chmodSync(platformBinary, 0o644);
     const unstartable = runOnPath(w, p.dir, path, ["--version"]);
     expect([unstartable.exitCode, unstartable.stdout]).toEqual([1, ""]);
-    expect(unstartable.stderr).toBe(
-      `agent-worktree: ${join(modules, "agent-worktree", "bin")}/../node_modules/${platformPackage}/agent-worktree is not executable\n  reinstall @cniska/agent-worktree\n`,
-    );
+    expect(errorOf(unstartable, "agent-worktree")).toEqual({
+      kind: "refusal",
+      code: "binary_not_executable",
+      message: `${join(modules, "agent-worktree", "bin")}/../node_modules/${platformPackage}/agent-worktree is not executable`,
+      act: "reinstall @cniska/agent-worktree",
+    });
     chmodSync(platformBinary, 0o755);
 
     expect(runOnPath(w, p.dir, path, ["--version"])).toEqual({
@@ -185,13 +199,11 @@ test(
       stdout: `${version}\n`,
       stderr: "",
     });
-    expect(runOnPath(w, p.dir, path, ["--version", "now"])).toEqual({
-      exitCode: 2,
-      stdout: "",
-      stderr:
-        "agent-worktree: agent-worktree --version takes no argument, and got: now\n  agent-worktree --version\n",
+    expect(usageRefused(runOnPath(w, p.dir, path, ["--version", "now"]), null)).toEqual({
+      message: "agent-worktree --version takes no argument, and got: now",
+      act: "agent-worktree --version",
     });
-    expect(succeeded(runOnPath(w, p.dir, path, ["create", "task-a"]))).toEqual([p.path("task-a")]);
+    expect(printedPath(runOnPath(w, p.dir, path, ["create", "task-a"]))).toBe(p.path("task-a"));
   },
   BUILD_TIMEOUT_MS,
 );

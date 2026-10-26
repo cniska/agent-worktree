@@ -1,10 +1,10 @@
 import { readFileSync } from "node:fs";
+import type { JsonObject } from "@toon-format/toon";
 import { unreachable } from "./assert";
-import { fateText } from "./branches";
-import { type Command, usageRefusal } from "./cli-contract";
+import { fateRecord, fateText } from "./branches";
+import { type Command, result, usageRefusal } from "./cli-contract";
 import { parseEvent } from "./event";
 import { install } from "./hooks";
-import { note } from "./log";
 import { blockText, PORT_LIMIT, type PortRequest, parsePortRequest } from "./ports";
 import { checkout, type Project, parseName, project, type WorktreeName, worktreePath } from "./project";
 import { create, init, type Listed, list, prune, remove } from "./worktrees";
@@ -31,41 +31,44 @@ function namedTarget(
   return { project: current, name: parseName(current, raw) };
 }
 
-function stateText(state: Listed["state"]): string {
-  switch (state.kind) {
-    case "unmanaged":
-      return "unmanaged";
-    case "orphaned":
-      return "orphaned (prune)";
-    case "unlisted":
-      return "unlisted";
-    case "legacy":
-      return "legacy (move or drop)";
-    case "pending":
-      return "setup pending";
-    case "ready":
-      return "ready";
-    default:
-      return unreachable(state);
-  }
+type StateKind = Listed["state"]["kind"];
+
+const NONE_IN_EACH_STATE: { readonly [Kind in StateKind]: 0 } = {
+  ready: 0,
+  pending: 0,
+  orphaned: 0,
+  unlisted: 0,
+  unmanaged: 0,
+  legacy: 0,
+};
+
+function branchOf(state: Listed["state"]): string | null {
+  if (state.kind === "unlisted" || state.worktree === null) return null;
+  return state.worktree.branch;
 }
 
-function branchText(state: Listed["state"]): string {
-  if (state.kind === "unlisted" || state.worktree === null) return "unlisted";
-  return state.worktree.branch ?? "detached";
-}
-
-const NOTHING_LISTED = "no task worktrees";
-
-const NO_BLOCK = "-";
-
-function portsText(state: Listed["state"]): string {
-  if (state.kind === "unmanaged" || state.block === null) return NO_BLOCK;
+function portsOf(state: Listed["state"]): string | null {
+  if (state.kind === "unmanaged" || state.block === null) return null;
   return blockText(state.block);
 }
 
-function listedLine({ path, state }: Listed): string {
-  return [state.name, stateText(state), branchText(state), portsText(state), path].join("\t");
+function listedRecord({ path, state }: Listed, full: boolean): JsonObject {
+  if (!full) return { name: state.name, state: state.kind, path };
+  return { name: state.name, state: state.kind, branch: branchOf(state), ports: portsOf(state), path };
+}
+
+function stateCounts(listed: readonly Listed[]): JsonObject {
+  return Object.fromEntries(
+    Object.keys(NONE_IN_EACH_STATE).map((kind) => [
+      kind,
+      listed.filter(({ state }) => state.kind === kind).length,
+    ]),
+  );
+}
+
+function listing(full: boolean): JsonObject {
+  const listed = list(project(process.cwd()));
+  return { counts: stateCounts(listed), worktrees: listed.map((each) => listedRecord(each, full)) };
 }
 
 type StringOption = { readonly option: string; readonly takes: string };
@@ -89,7 +92,8 @@ const createCommand: Command = {
   async run(positionals, values) {
     const from = stringOption(values.from, { option: "from", takes: "a ref" }, this);
     const target = namedTarget(positionals, this);
-    return [await create(target.project, target.name, { here: checkout(process.cwd()).toplevel, from })];
+    const path = await create(target.project, target.name, { here: checkout(process.cwd()).toplevel, from });
+    return result({ path });
   },
 };
 
@@ -102,7 +106,7 @@ const initCommand: Command = {
     noPositionals(positionals, this);
     const current = checkout(process.cwd());
     await init(current.project, current.toplevel);
-    return [];
+    return result(null);
   },
 };
 
@@ -114,7 +118,8 @@ const removeCommand: Command = {
   options: { force: { type: "boolean" } },
   async run(positionals, values) {
     const target = namedTarget(positionals, this);
-    return [fateText(remove(target.project, target.name, values.force === true))];
+    const fate = remove(target.project, target.name, values.force === true);
+    return result({ name: target.name, ...fateRecord(fate) });
   },
 };
 
@@ -128,22 +133,23 @@ const pruneCommand: Command = {
     noPositionals(positionals, this);
     const current = checkout(process.cwd());
     prune(current.project, current.toplevel);
-    return [];
+    return result(null);
   },
 };
 
 const lsCommand: Command = {
   name: "ls",
-  usage: "agent-worktree ls",
-  summary: "list the worktrees: name, state, branch, port block, path",
-  options: {},
-  async run(positionals) {
+  usage: "agent-worktree ls [--full]",
+  summary:
+    "count the worktrees in each state and list each one's name, state and path, or with --full also its branch and port block",
+  options: { full: { type: "boolean" } },
+  async run(positionals, values) {
     noPositionals(positionals, this);
-    const lines = list(project(process.cwd())).map(listedLine);
-    if (lines.length === 0) note(NOTHING_LISTED);
-    return lines;
+    return result(listing(values.full === true));
   },
 };
+
+export const LIVE_VIEW: Command = lsCommand;
 
 const pathCommand: Command = {
   name: "path",
@@ -152,7 +158,7 @@ const pathCommand: Command = {
   options: {},
   async run(positionals) {
     const target = namedTarget(positionals, this);
-    return [worktreePath(target.project, target.name)];
+    return result({ path: worktreePath(target.project, target.name) });
   },
 };
 
@@ -167,9 +173,12 @@ const hookCommand: Command = {
     const { event, name } = parseEvent(current.project, readFileSync(0, "utf8"));
     switch (event) {
       case "WorktreeCreate":
-        return [await create(current.project, name, { here: current.toplevel, from: null })];
+        return {
+          kind: "event",
+          line: await create(current.project, name, { here: current.toplevel, from: null }),
+        };
       case "WorktreeRemove":
-        return [fateText(remove(current.project, name, true))];
+        return { kind: "event", line: fateText(remove(current.project, name, true)) };
       default:
         return unreachable(event);
     }
@@ -211,12 +220,13 @@ const installCommand: Command = {
         this.usage,
       );
     const current = checkout(process.cwd());
-    return install(
+    const hooks = install(
       current.project,
       current.toplevel,
       values.local === true ? "local" : "committed",
       installed,
     );
+    return result({ hooks: [...hooks] });
   },
 };
 

@@ -5,8 +5,13 @@ builds='__BUILDS__'
 name=agent-worktree
 scope=@cniska
 
+quoted() {
+  printf '"%s"' "$(printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g')"
+}
+
 refuse() {
-  printf '%s: %s\n  %s\n' "$name" "$1" "$2" >&2
+  printf 'command: %s\nok: false\nerror:\n  kind: refusal\n  code: %s\n  message: %s\n  meta:\n  resolve: %s\n' \
+    "$name" "$1" "$(quoted "$2")" "$(quoted "$3")" >&2
   exit 1
 }
 
@@ -34,7 +39,7 @@ target=$os-$cpu
 
 case " $builds " in
   *" $target "*) ;;
-  *) refuse \
+  *) refuse no_build_for_platform \
     "$name ships no build for $target, only $(printf '%s' "$builds" | sed 's/ / and /g')" \
     "build $name from source with Bun, as its docs/development.md says" ;;
 esac
@@ -47,9 +52,9 @@ for dir in "$bin/../node_modules/$package" "$bin/../../$name-$target"; do
     break
   fi
 done
-[ -n "$binary" ] || refuse \
+[ -n "$binary" ] || refuse platform_package_missing \
   "$package is not installed beside $scope/$name" \
   "reinstall $scope/$name with optional dependencies enabled"
-[ -x "$binary" ] || refuse "$binary is not executable" "reinstall $scope/$name"
+[ -x "$binary" ] || refuse binary_not_executable "$binary is not executable" "reinstall $scope/$name"
 
 exec "$binary" "$@"

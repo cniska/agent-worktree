@@ -15,8 +15,10 @@ import {
   onLoopback,
   portRecording,
   portsRecorded,
+  printedPath,
   project,
   refused,
+  removed,
   removeScratchDirs,
   repo,
   requestPorts,
@@ -55,7 +57,12 @@ test("AC-31 remove gives teardown the block and frees it for the next create", a
   const [first] = await freeUnits();
   succeeded(run(w, p.dir, ["create", "task-a"]));
   succeeded(run(w, p.dir, ["create", "task-b"]));
-  expect(succeeded(run(w, p.dir, ["remove", "task-a"]))).toEqual(["branch task-a kept, no remote origin"]);
+  expect(removed(run(w, p.dir, ["remove", "task-a"]))).toEqual({
+    name: "task-a",
+    branch: "task-a",
+    outcome: "no_remote",
+    remote: "origin",
+  });
   expect(portsRecorded(record)).toEqual([String(first)]);
   succeeded(run(w, p.dir, ["create", "task-c"]));
   expect(lsPorts(w, p.dir)["task-c"]).toBe(blockText(first));
@@ -108,9 +115,9 @@ test("AC-34 creates started at once each get a block of their own, and inits of 
     p.dir,
     names.map((name) => ["create", name]),
   );
-  expect(ran.map((each) => succeeded(each))).toEqual(names.map((name) => [p.path(name)]));
+  expect(ran.map(printedPath)).toEqual(names.map(p.path));
   const spans = Object.values(lsPorts(w, p.dir))
-    .map((text) => text.split("-").map(Number))
+    .map((text) => (text ?? "").split("-").map(Number))
     .sort(([a = 0], [b = 0]) => a - b);
   expect(spans.map(([first = 0, last = 0]) => last - first)).toEqual(names.map(() => 19));
   expect(spans.every(([first = 0], index) => index === 0 || first > (spans[index - 1]?.[1] ?? 0))).toBe(true);
@@ -140,9 +147,9 @@ test("AC-35 with no free block create refuses and keeps setup pending, then resu
     act: "remove a worktree you are done with, fix a teardown that failed for a worktree that is gone, or run agent-worktree prune in another clone whose gone worktrees hold blocks, then run the command again",
   });
   expect(ls(w, p.dir)).toEqual([
-    { name: "task-a", state: "setup pending", branch: "task-a", path: p.path("task-a") },
+    { name: "task-a", state: "pending", branch: "task-a", path: p.path("task-a") },
   ]);
-  expect(lsPorts(w, p.dir)).toEqual({ "task-a": "-" });
+  expect(lsPorts(w, p.dir)).toEqual({ "task-a": null });
   expect(portsRecorded(record)).toEqual([]);
   succeeded(run(w, p.dir, ["create", "task-a"]));
   expect(portsRecorded(record)).toEqual([String(free[0])]);
@@ -169,7 +176,7 @@ test("AC-43 with no free block create first removes a worktree whose branch land
   git(w, landed, ["push", "-q", "-u", "origin", "task-a"]);
   git(w, landed, ["push", "-q", "origin", "task-a:main"]);
   const ran = await holding(onLoopback(free.slice(1)), () => runAsync(w, p.dir, ["create", "task-b"]));
-  expect(succeeded(ran)).toEqual([p.path("task-b")]);
+  expect(printedPath(ran)).toBe(p.path("task-b"));
   expect(existsSync(teardown)).toBe(true);
   expect(existsSync(landed)).toBe(false);
   expect(portsRecorded(record)).toEqual([String(free[0]), String(free[0])]);
@@ -196,7 +203,7 @@ test("AC-43 a landed worktree git refuses to remove is noted with why, and creat
     `agent-worktree: worktree task-a not removed, though its branch landed: git worktree remove ${landed} refused: `,
   );
   expect(existsSync(join(landed, "left"))).toBe(true);
-  expect(lsPorts(w, p.dir)).toEqual({ "task-a": blockText(free[0], 10), "task-b": "-" });
+  expect(lsPorts(w, p.dir)).toEqual({ "task-a": blockText(free[0], 10), "task-b": null });
 });
 
 test("AC-36 init gives a registration with no block one, resizes it to a changed request, mends a broken one and frees it when the request goes", async () => {
@@ -210,7 +217,7 @@ test("AC-36 init gives a registration with no block one, resizes it to a changed
   git(w, p.dir, ["worktree", "add", "-q", path, "-b", "task-a"]);
   mkdirSync(join(p.dir, ".git", "agent-worktrees", "task-a"), { recursive: true });
   writeFileSync(join(p.dir, ".git", "agent-worktrees", "task-a", "ready"), "");
-  expect(lsPorts(w, p.dir)).toEqual({ "task-a": "-" });
+  expect(lsPorts(w, p.dir)).toEqual({ "task-a": null });
   const free = await freeUnits();
   const [first] = free;
   succeeded(run(w, path, ["init"]));
@@ -226,7 +233,7 @@ test("AC-36 init gives a registration with no block one, resizes it to a changed
   expect(lsPorts(w, p.dir)).toEqual({ "task-a": blockText(three, 30) });
   rmSync(join(path, HOOKS, "ports"));
   succeeded(run(w, path, ["init"]));
-  expect(lsPorts(w, p.dir)).toEqual({ "task-a": "-" });
+  expect(lsPorts(w, p.dir)).toEqual({ "task-a": null });
 });
 
 test("AC-37 a worktree forced out past a failed teardown keeps its block until prune tears it down", async () => {
@@ -300,8 +307,8 @@ test("AC-41 a project gets ports only when it asks, as many as it asks for", asy
   installHook(w, p.dir, "setup", portRecording(record));
   const free = await freeUnits();
   const plain = await holding(onLoopback(free), () => runAsync(w, p.dir, ["create", "task-a"]));
-  expect(succeeded(plain)).toEqual([p.path("task-a")]);
-  expect(lsPorts(w, p.dir)).toEqual({ "task-a": "-" });
+  expect(printedPath(plain)).toBe(p.path("task-a"));
+  expect(lsPorts(w, p.dir)).toEqual({ "task-a": null });
   expect(portsRecorded(record)).toEqual(["unset"]);
   requestPorts(w, p.dir, "20\n");
   const first = firstRun(free, 2);
@@ -314,6 +321,6 @@ test("AC-41 a project gets ports only when it asks, as many as it asks for", asy
     message: `${file} must hold one whole number of ports from 1 to 1000, and holds: "ten\\n"`,
     act: `run agent-worktree install --ports <n> in ${p.path("task-c")} with the number of ports the worktree needs, or delete ${file} when it needs none, then run the command again`,
   });
-  expect(ls(w, p.dir).find(({ name }) => name === "task-c")?.state).toBe("setup pending");
-  expect(lsPorts(w, p.dir)["task-c"]).toBe("-");
+  expect(ls(w, p.dir).find(({ name }) => name === "task-c")?.state).toBe("pending");
+  expect(lsPorts(w, p.dir)["task-c"]).toBeNull();
 });

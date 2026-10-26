@@ -6,7 +6,7 @@
 
 agent-worktree never works out what a checkout needs: `agent-worktree install` writes the setup and teardown commands and the port count the project gives it into hooks, and agent-worktree runs those.
 
-- `agent-worktree create <name>` makes a git worktree outside the repository, on a new branch cut from `origin`'s default branch as `origin` has it now, runs the project's setup hook in it, and prints its path.
+- `agent-worktree create <name>` makes a git worktree outside the repository, on a new branch cut from `origin`'s default branch as `origin` has it now, runs the project's setup hook in it, and prints its path in its result.
 - `agent-worktree remove <name>` runs the project's teardown hook, removes the worktree, and once its remote's default branch has the branch, deletes it locally and on that remote: its upstream or, with none, the branch of the same name on `origin`, other than `origin`'s default branch. When the remote branch holds a commit the branch lacks, it keeps both copies.
 - The `cniska-worktree` Claude Code plugin sends Claude Code's own worktrees through the same commands.
 
@@ -60,10 +60,10 @@ Claude Code makes worktrees of its own, for EnterWorktree and for subagents, wit
 | `agent-worktree create [--from <ref>] <name>` | Create the worktree, run setup, print the path |
 | `agent-worktree remove [--force] <name>` | Run teardown, remove the worktree and settle its branch |
 | `agent-worktree prune` | Tear down gone worktrees and remove those whose branch landed |
-| `agent-worktree ls` | One line per worktree |
+| `agent-worktree ls [--full]` | Count the worktrees in each state and list them; also what `agent-worktree` alone prints |
 | `agent-worktree path <name>` | Print the worktree's path |
 
-[Commands](docs/commands.md) lists every command, where `create` cuts a branch and how `remove` settles one.
+Each command prints its result, or its error, as one [TOON](https://toonformat.dev) document. [Commands](docs/commands.md) lists every command and its output, where `create` cuts a branch and how `remove` settles one.
 
 ## Docs
 

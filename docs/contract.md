@@ -10,7 +10,7 @@ Any git repository works as it is. A project whose worktrees need more than a ch
 agent-worktree install --setup "mise install && pnpm install --frozen-lockfile" --teardown "docker compose down -v" --ports 20
 ```
 
-- Each option is optional: install writes `.worktree-hooks/setup`, `.worktree-hooks/teardown` and `.worktree-hooks/ports` for the options given, prints their paths, and leaves the hooks it is not given as they are. A later `install --teardown "<command>"` changes only the teardown.
+- Each option is optional: install writes `.worktree-hooks/setup`, `.worktree-hooks/teardown` and `.worktree-hooks/ports` for the options given, prints their paths as `hooks`, and leaves the hooks it is not given as they are. A later `install --teardown "<command>"` changes only the teardown.
 - A project with no setup hook gets no setup, one with no teardown hook no teardown, and one with no ports hook no ports.
 - Commit `.worktree-hooks/`; delete a hook to drop it. install never works out a command, and never stages or commits.
 - A setup or teardown hook is plain shell that holds its command as `command='<command>'`, so the command shows in the diff, and runs it with `sh -ec`.
@@ -66,7 +66,7 @@ agent-worktree reads that hook, never runs it, in the checkout being set up, and
 - **The block.** Each task worktree of a project that asks gets its own block: the lowest free one made of enough consecutive 10-port units from 24000 to 24999 to hold the number asked for. Its hooks get the first port as `WORKTREE_PORT`, and the project's ports run from there.
 - **No sharing.** A block is never worked out from the name, so two worktrees never share one, and a unit where another program already listens is skipped.
 - **Finding a listener.** agent-worktree connects to the port on `127.0.0.1` and `::1`, which a program listening on every address accepts too. It never binds a port to probe it, since binding `0.0.0.0` or `::` can raise the macOS firewall prompt on every `create`, in front of an agent nobody is watching.
-- **Freeing.** Blocks are shared across every clone on the machine; `ls` shows each worktree's, `remove` frees it, and `prune` frees those of worktrees removed some other way, even in a clone since deleted. `create` and `init` take such a block over themselves when they reach it, running a gone worktree's teardown first as `prune` would.
+- **Freeing.** Blocks are shared across every clone on the machine; `ls --full` shows each worktree's, `remove` frees it, and `prune` frees those of worktrees removed some other way, even in a clone since deleted. `create` and `init` take such a block over themselves when they reach it, running a gone worktree's teardown first as `prune` would.
 - **None free.** With no block free, `create` and `init` first remove the worktrees whose branch landed, as `prune` does, before refusing.
 - **The primary.** The primary checkout gets no block and keeps the project's default ports, so a plain clone, such as CI's, does too.
 - **Changes.** `init` gives a block to a worktree an earlier release made, resizes one whose request changed, and frees one whose project no longer asks.

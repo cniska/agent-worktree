@@ -6,8 +6,11 @@ import { version } from "../package.json";
 import {
   hookEvent,
   ls,
+  printedLines,
+  printedPath,
   project,
   refused,
+  removed,
   removeScratchDirs,
   run,
   runProgram,
@@ -22,7 +25,7 @@ const SCRATCH_VARIABLES = ["HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STAT
 
 const REMOVE_USAGE = "agent-worktree remove [--force] <name>";
 
-const LS_USAGE = "agent-worktree ls";
+const LS_USAGE = "agent-worktree ls [--full]";
 
 const INSTALL_USAGE =
   "agent-worktree install [--local] [--setup <command>] [--teardown <command>] [--ports <n>]";
@@ -39,23 +42,34 @@ const USAGES = [
   "agent-worktree --version",
 ];
 
-test("AC-24 results, refusals and usage errors exit 0, 1 and 2 with their output", () => {
+test("AC-24 results, refusals and usage errors exit 0, 1 and 2 with their TOON envelope", () => {
   const w = world();
   const p = project(w);
   expect(run(w, p.dir, ["path", "task-a"])).toEqual({
     exitCode: 0,
-    stdout: `${p.path("task-a")}\n`,
+    stdout: `command: path\nok: true\nresult:\n  path: ${p.path("task-a")}\n`,
     stderr: "",
   });
   const outside = join(w.root, "outside");
   mkdirSync(outside);
-  expect(run(w, outside, ["ls"])).toEqual({
+  expect(run(w, outside, ["path", "task-a"])).toEqual({
     exitCode: 1,
     stdout: "",
-    stderr: `agent-worktree ls: ${outside} is not inside a git checkout\n  cd into the project's checkout and run the command again\n`,
+    stderr: [
+      "command: path",
+      "ok: false",
+      "error:",
+      "  kind: refusal",
+      "  code: not_a_checkout",
+      `  message: ${outside} is not inside a git checkout`,
+      "  meta:",
+      `    cwd: ${outside}`,
+      "  resolve: cd into the project's checkout and run the command again",
+      "",
+    ].join("\n"),
   });
   expect(usageRefused(run(w, p.dir, ["task-a"]), null)).toEqual({
-    message: "task-a is not an agent-worktree command; agent-worktree with no command lists them",
+    message: "task-a is not an agent-worktree command; agent-worktree --help lists them",
     act: "agent-worktree create|init|remove|prune|ls|path|hook|install|--version",
   });
   expect(existsSync(p.path("task-a"))).toBe(false);
@@ -72,23 +86,27 @@ test("AC-24 results, refusals and usage errors exit 0, 1 and 2 with their output
   });
 });
 
-test("AC-25 the usage lists every command, or one with --help", () => {
+test("AC-25 --help lists every command, or one with <command> --help", () => {
   const w = world();
-  const bare = run(w, w.root, []);
-  expect({ exitCode: bare.exitCode, stderr: bare.stderr }).toEqual({ exitCode: 0, stderr: "" });
-  const lines = succeeded(bare);
-  expect(lines).toHaveLength(USAGES.length);
-  lines.forEach((line, index) => {
-    const usage = USAGES[index] ?? "";
-    expect(line).toStartWith(`${usage} `);
-    expect(line.slice(usage.length).trim()).not.toBe("");
-  });
-  expect(run(w, w.root, ["--help"])).toEqual(bare);
-  const remove = run(w, w.root, ["remove", "--help"]);
-  expect(remove).toEqual({ exitCode: 0, stdout: `${lines[2]}\n`, stderr: "" });
-  expect(remove.stdout).toContain(
-    "run teardown and remove the worktree; once its remote's default branch has the branch, delete it locally and on that remote, its upstream or, with none, its same-name branch on origin other than the default branch, keeping both copies when the remote branch holds a commit the branch lacks",
+  const help = run(w, w.root, ["--help"]);
+  expect({ exitCode: help.exitCode, stderr: help.stderr }).toEqual({ exitCode: 0, stderr: "" });
+  expect(help.stdout).toStartWith(
+    "command: agent-worktree\nok: true\nresult:\n  commands[9]{usage,summary}:\n",
   );
+  expect(succeeded(help)).toEqual({
+    commands: USAGES.map((usage) => ({ usage, summary: expect.stringMatching(/\S/) })),
+  });
+  expect(run(w, w.root, ["-h"])).toEqual(help);
+  const remove = run(w, w.root, ["remove", "--help"]);
+  expect({ exitCode: remove.exitCode, stderr: remove.stderr }).toEqual({ exitCode: 0, stderr: "" });
+  expect(remove.stdout).toStartWith("command: remove\nok: true\nresult:\n");
+  const described = {
+    usage: REMOVE_USAGE,
+    summary:
+      "run teardown and remove the worktree; once its remote's default branch has the branch, delete it locally and on that remote, its upstream or, with none, its same-name branch on origin other than the default branch, keeping both copies when the remote branch holds a commit the branch lacks",
+  };
+  expect(succeeded(remove)).toEqual(described);
+  expect(help.stdout).toContain(`  "${described.usage}","${described.summary}"\n`);
 });
 
 test("AC-26 each command reads state changed on disk since the last", () => {
@@ -98,7 +116,7 @@ test("AC-26 each command reads state changed on disk since the last", () => {
   succeeded(run(w, p.dir, ["create", "task-a"]));
   expect(ls(w, p.dir)).toEqual([{ name: "task-a", state: "ready", branch: "task-a", path }]);
   rmSync(path, { recursive: true });
-  expect(ls(w, p.dir)).toEqual([{ name: "task-a", state: "orphaned (prune)", branch: "task-a", path }]);
+  expect(ls(w, p.dir)).toEqual([{ name: "task-a", state: "orphaned", branch: "task-a", path }]);
   rmSync(join(p.dir, ".git", "agent-worktrees", "task-a"), { recursive: true });
   expect(ls(w, p.dir)).toEqual([]);
   expect(refused(run(w, p.dir, ["remove", "task-a"]), "remove").message).toBe(
@@ -137,13 +155,13 @@ test("AC-27 the test environment's HOME and XDG directories are scratch director
   );
   const w = world();
   const seen = Object.values(
-    scratchVariables(environmentOf(succeeded(runProgram(w, w.root, ["/usr/bin/env"], {})))),
+    scratchVariables(environmentOf(printedLines(runProgram(w, w.root, ["/usr/bin/env"], {})))),
   );
   expect(seen.map(placed(w.root))).toEqual(
     seen.map((path) => ({ path, inAccountHome: false, inScratch: true })),
   );
   const p = project(w);
-  const [path = ""] = succeeded(run(w, p.dir, ["path", "task-a"]));
+  const path = printedPath(run(w, p.dir, ["path", "task-a"]));
   expect(placed(w.root)(path)).toEqual({ path, inAccountHome: false, inScratch: true });
 });
 
@@ -151,14 +169,19 @@ test("AC-28 the commands work with the network unavailable", () => {
   const w = world();
   const p = project(w);
   const path = p.path("task-a");
-  expect(succeeded(run(w, p.dir, ["path", "task-a"]))).toEqual([path]);
-  expect(succeeded(run(w, p.dir, ["create", "task-a"]))).toEqual([path]);
-  expect(succeeded(run(w, path, ["init"]))).toEqual([]);
+  expect(printedPath(run(w, p.dir, ["path", "task-a"]))).toBe(path);
+  expect(printedPath(run(w, p.dir, ["create", "task-a"]))).toBe(path);
+  expect(succeeded(run(w, path, ["init"]))).toBeNull();
   expect(ls(w, p.dir)).toEqual([{ name: "task-a", state: "ready", branch: "task-a", path }]);
-  expect(succeeded(run(w, p.dir, ["remove", "task-a"]))).toEqual(["branch task-a kept, no remote origin"]);
-  expect(succeeded(run(w, p.dir, ["prune"]))).toEqual([]);
+  expect(removed(run(w, p.dir, ["remove", "task-a"]))).toEqual({
+    name: "task-a",
+    branch: "task-a",
+    outcome: "no_remote",
+    remote: "origin",
+  });
+  expect(succeeded(run(w, p.dir, ["prune"]))).toBeNull();
   const stdin = hookEvent({ hook_event_name: "WorktreeCreate", name: "task-b" });
-  expect(succeeded(run(w, p.dir, ["hook"], { stdin }))).toEqual([p.path("task-b")]);
+  expect(printedLines(run(w, p.dir, ["hook"], { stdin }))).toEqual([p.path("task-b")]);
 });
 
 test("AC-47 --version prints the version alone, and refuses an argument after it", () => {

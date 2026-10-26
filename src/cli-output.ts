@@ -1,12 +1,34 @@
-import { BUG, CodedError, messageOf } from "./coded-error";
+import { encode, type JsonObject, type JsonValue } from "@toon-format/toon";
+import { BUG, CodedError, type ErrorKind, messageOf } from "./coded-error";
 
-export function writeLines(lines: readonly string[]): void {
-  for (const line of lines) process.stdout.write(`${line}\n`);
+type PrintedError = {
+  readonly kind: ErrorKind;
+  readonly code: string;
+  readonly message: string;
+  readonly meta: JsonObject;
+  readonly resolve: string;
+};
+
+export function writeResult(command: string, result: JsonValue): void {
+  process.stdout.write(`${encode({ command, ok: true, result })}\n`);
 }
 
-export function writeError(command: string | null, error: unknown): void {
-  const [message, resolve] =
-    error instanceof CodedError ? [error.message, error.resolve] : [messageOf(error), BUG];
-  const prefix = command === null ? "agent-worktree" : `agent-worktree ${command}`;
-  process.stderr.write(`${prefix}: ${message}\n  ${resolve}\n`);
+export function writeLine(line: string): void {
+  process.stdout.write(`${line}\n`);
+}
+
+function errorOf(error: unknown): PrintedError {
+  if (error instanceof CodedError)
+    return {
+      kind: error.kind,
+      code: error.code,
+      message: error.message,
+      meta: error.meta,
+      resolve: error.resolve,
+    };
+  return { kind: "fault", code: "unexpected", message: messageOf(error), meta: {}, resolve: BUG };
+}
+
+export function writeError(command: string, error: unknown): void {
+  process.stderr.write(`${encode({ command, ok: false, error: errorOf(error) })}\n`);
 }

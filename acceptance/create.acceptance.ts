@@ -8,10 +8,12 @@ import {
   HOOKS,
   installHook,
   ls,
+  printedPath,
   project,
   recorded,
   recording,
   refused,
+  removed,
   removeScratchDirs,
   repo,
   run,
@@ -71,19 +73,19 @@ test("AC-6 create makes the worktree on its branch, sets it up once, and lists i
   installHook(w, p.dir, "setup", recording(record));
   const path = p.path("task-a");
   const head = git(w, p.dir, ["rev-parse", "HEAD"]);
-  expect(succeeded(run(w, p.dir, ["create", "task-a"]))).toEqual([path]);
+  expect(printedPath(run(w, p.dir, ["create", "task-a"]))).toBe(path);
   expect(git(w, path, ["branch", "--show-current"])).toBe("task-a");
   expect(git(w, path, ["rev-parse", "HEAD"])).toBe(head);
   expect(recorded(record)).toEqual([{ name: "task-a", path, primary: p.dir, cwd: path }]);
   expect(ls(w, p.dir)).toEqual([{ name: "task-a", state: "ready", branch: "task-a", path }]);
-  expect(succeeded(run(w, p.dir, ["create", "task-a"]))).toEqual([path]);
+  expect(printedPath(run(w, p.dir, ["create", "task-a"]))).toBe(path);
   expect(recorded(record)).toHaveLength(1);
   git(w, p.dir, ["branch", "task-b"]);
   const branched = git(w, p.dir, ["rev-parse", "task-b"]);
   writeFileSync(join(p.dir, "later"), "later\n");
   git(w, p.dir, ["add", "later"]);
   git(w, p.dir, ["commit", "-q", "-m", "later"]);
-  expect(succeeded(run(w, p.dir, ["create", "task-b"]))).toEqual([p.path("task-b")]);
+  expect(printedPath(run(w, p.dir, ["create", "task-b"]))).toBe(p.path("task-b"));
   expect(git(w, p.path("task-b"), ["branch", "--show-current"])).toBe("task-b");
   expect(git(w, p.path("task-b"), ["rev-parse", "HEAD"])).toBe(branched);
   expect(recorded(record)).toEqual([
@@ -107,10 +109,10 @@ test("AC-7 a failed setup leaves the worktree pending, and the rerun resumes it"
     message: `${join(path, HOOKS, "setup")} exited 3 in ${path}; setup is pending`,
     act: "fix what the hook reported, then run the command again to resume",
   });
-  expect(ls(w, p.dir)).toEqual([{ name: "task-a", state: "setup pending", branch: "task-a", path }]);
+  expect(ls(w, p.dir)).toEqual([{ name: "task-a", state: "pending", branch: "task-a", path }]);
   writeFileSync(join(path, "work"), "kept\n");
   writeFileSync(fixed, "");
-  expect(succeeded(run(w, p.dir, ["create", "task-a"]))).toEqual([path]);
+  expect(printedPath(run(w, p.dir, ["create", "task-a"]))).toBe(path);
   expect(existsSync(join(path, "work"))).toBe(true);
   expect(recorded(record)).toEqual([{ name: "task-a", path, primary: p.dir, cwd: path }]);
   expect(ls(w, p.dir)).toEqual([{ name: "task-a", state: "ready", branch: "task-a", path }]);
@@ -129,7 +131,7 @@ test("AC-8 create and remove refuse unmanaged, orphaned and unlisted worktrees u
   expect(refused(run(w, p.dir, ["remove", "--force", "task-u"]), "remove")).toEqual(unmanagedRefusal);
   expect(existsSync(unmanaged)).toBe(true);
   rmSync(unmanaged, { recursive: true });
-  expect(succeeded(run(w, p.dir, ["create", "task-u"]))).toEqual([unmanaged]);
+  expect(printedPath(run(w, p.dir, ["create", "task-u"]))).toBe(unmanaged);
 
   const orphaned = p.path("task-o");
   succeeded(run(w, p.dir, ["create", "task-o"]));
@@ -141,7 +143,7 @@ test("AC-8 create and remove refuse unmanaged, orphaned and unlisted worktrees u
   expect(refused(run(w, p.dir, ["create", "task-o"]), "create")).toEqual(orphanedRefusal);
   expect(refused(run(w, p.dir, ["remove", "task-o"]), "remove")).toEqual(orphanedRefusal);
   succeeded(run(w, p.dir, ["prune"]));
-  expect(succeeded(run(w, p.dir, ["create", "task-o"]))).toEqual([orphaned]);
+  expect(printedPath(run(w, p.dir, ["create", "task-o"]))).toBe(orphaned);
 
   const unlisted = p.path("task-n");
   succeeded(run(w, p.dir, ["create", "task-n"]));
@@ -156,7 +158,7 @@ test("AC-8 create and remove refuse unmanaged, orphaned and unlisted worktrees u
   expect(refused(run(w, p.dir, ["remove", "task-n"]), "remove")).toEqual(unlistedRefusal);
   rmSync(unlisted, { recursive: true });
   succeeded(run(w, p.dir, ["prune"]));
-  expect(succeeded(run(w, p.dir, ["create", "task-n"]))).toEqual([unlisted]);
+  expect(printedPath(run(w, p.dir, ["create", "task-n"]))).toBe(unlisted);
 });
 
 test("AC-9 init sets up the primary, a pending task worktree, and refuses any other checkout", () => {
@@ -166,7 +168,7 @@ test("AC-9 init sets up the primary, a pending task worktree, and refuses any ot
   const fixed = join(w.root, "fixed");
   installHook(w, p.dir, "setup", `[ -f "${fixed}" ] || exit 3\n${recording(record)}`);
   writeFileSync(fixed, "");
-  expect(succeeded(run(w, p.dir, ["init"], { env: { WORKTREE_NAME: "inherited" } }))).toEqual([]);
+  expect(succeeded(run(w, p.dir, ["init"], { env: { WORKTREE_NAME: "inherited" } }))).toBeNull();
   expect(recorded(record)).toEqual([{ name: "unset", path: p.dir, primary: p.dir, cwd: p.dir }]);
   rmSync(fixed);
   const path = p.path("task-a");
@@ -174,9 +176,9 @@ test("AC-9 init sets up the primary, a pending task worktree, and refuses any ot
     message: `${join(path, HOOKS, "setup")} exited 3 in ${path}; setup is pending`,
     act: "fix what the hook reported, then run the command again to resume",
   });
-  expect(ls(w, p.dir)).toEqual([{ name: "task-a", state: "setup pending", branch: "task-a", path }]);
+  expect(ls(w, p.dir)).toEqual([{ name: "task-a", state: "pending", branch: "task-a", path }]);
   writeFileSync(fixed, "");
-  expect(succeeded(run(w, path, ["init"]))).toEqual([]);
+  expect(succeeded(run(w, path, ["init"]))).toBeNull();
   expect(recorded(record)).toEqual([
     { name: "unset", path: p.dir, primary: p.dir, cwd: p.dir },
     { name: "task-a", path, primary: p.dir, cwd: path },
@@ -215,15 +217,20 @@ test("AC-52 create cuts a new branch from origin's default branch as fetched now
   commitIn(w, p.dir, "local-only");
   const remoteTip = aheadOnRemote(w, bare, "remote-only");
   const path = p.path("task-a");
-  expect(succeeded(run(w, p.dir, ["create", "task-a"]))).toEqual([path]);
+  expect(printedPath(run(w, p.dir, ["create", "task-a"]))).toBe(path);
   expect(git(w, path, ["rev-parse", "HEAD"])).toBe(remoteTip);
   expect(upstreamOf(w, p.dir, "task-a")).toBe("");
   commitIn(w, path, "work");
   git(w, path, ["push", "-q", "-u", "origin", "task-a"]);
   git(w, path, ["push", "-q", "origin", "task-a:main"]);
-  expect(succeeded(run(w, p.dir, ["remove", "task-a"]))).toEqual([
-    "branch task-a deleted, merged into origin/main, and origin/task-a deleted",
-  ]);
+  expect(removed(run(w, p.dir, ["remove", "task-a"]))).toEqual({
+    name: "task-a",
+    branch: "task-a",
+    outcome: "deleted",
+    landing: "merged",
+    into: "origin/main",
+    remoteBranch: "origin/task-a",
+  });
   expect(git(w, p.dir, ["branch", "--list", "task-a"])).toBe("");
 });
 
@@ -234,17 +241,17 @@ test("AC-53 create --from cuts from the ref as the checkout it runs in names it,
   const tagged = commitIn(w, p.dir, "tagged");
   git(w, p.dir, ["tag", "v1"]);
   commitIn(w, p.dir, "after-tag");
-  expect(succeeded(run(w, p.dir, ["create", "--from", "v1", "task-a"]))).toEqual([p.path("task-a")]);
+  expect(printedPath(run(w, p.dir, ["create", "--from", "v1", "task-a"]))).toBe(p.path("task-a"));
   expect(git(w, p.path("task-a"), ["rev-parse", "HEAD"])).toBe(tagged);
   expect(upstreamOf(w, p.dir, "task-a")).toBe("");
   const inTask = commitIn(w, p.path("task-a"), "in-task");
-  expect(succeeded(run(w, p.path("task-a"), ["create", "--from", "HEAD", "task-b"]))).toEqual([
+  expect(printedPath(run(w, p.path("task-a"), ["create", "--from", "HEAD", "task-b"]))).toBe(
     p.path("task-b"),
-  ]);
+  );
   expect(git(w, p.path("task-b"), ["rev-parse", "HEAD"])).toBe(inTask);
   const stale = git(w, p.dir, ["rev-parse", "origin/main"]);
   aheadOnRemote(w, bare, "unfetched");
-  expect(succeeded(run(w, p.dir, ["create", "--from", "origin/main", "task-c"]))).toEqual([p.path("task-c")]);
+  expect(printedPath(run(w, p.dir, ["create", "--from", "origin/main", "task-c"]))).toBe(p.path("task-c"));
   expect(git(w, p.path("task-c"), ["rev-parse", "HEAD"])).toBe(stale);
   expect(git(w, p.dir, ["rev-parse", "origin/main"])).toBe(stale);
   expect(upstreamOf(w, p.dir, "task-c")).toBe("");
@@ -266,14 +273,14 @@ test("AC-54 with no remote or an empty one create cuts from HEAD noting why, and
   const p = project(w);
   const head = git(w, p.dir, ["rev-parse", "HEAD"]);
   const local = run(w, p.dir, ["create", "task-a"]);
-  expect(succeeded(local)).toEqual([p.path("task-a")]);
+  expect(printedPath(local)).toBe(p.path("task-a"));
   expect(local.stderr).toContain("agent-worktree: branch task-a cut from HEAD, no remote origin\n");
   expect(git(w, p.path("task-a"), ["rev-parse", "HEAD"])).toBe(head);
   const empty = join(w.root, "remotes", "empty.git");
   git(w, w.root, ["init", "-q", "--bare", "-b", "main", empty]);
   git(w, p.dir, ["remote", "add", "origin", empty]);
   const unborn = run(w, p.dir, ["create", "task-b"]);
-  expect(succeeded(unborn)).toEqual([p.path("task-b")]);
+  expect(printedPath(unborn)).toBe(p.path("task-b"));
   expect(unborn.stderr).toContain(
     "agent-worktree: branch task-b cut from HEAD, origin has no default branch\n",
   );
@@ -286,7 +293,7 @@ test("AC-54 with no remote or an empty one create cuts from HEAD noting why, and
   );
   expect(existsSync(p.path("task-c"))).toBe(false);
   expect(git(w, p.dir, ["branch", "--list", "task-c"])).toBe("");
-  expect(succeeded(run(w, p.dir, ["create", "--from", "HEAD", "task-c"]))).toEqual([p.path("task-c")]);
+  expect(printedPath(run(w, p.dir, ["create", "--from", "HEAD", "task-c"]))).toBe(p.path("task-c"));
   expect(git(w, p.path("task-c"), ["rev-parse", "HEAD"])).toBe(head);
 });
 
@@ -307,12 +314,12 @@ test("AC-55 create --from refuses an existing branch, and is ignored, noted, on 
   refused(run(w, p.dir, ["create", "--from", "HEAD", "task-b"]), "create");
   writeFileSync(fixed, "");
   const resumed = run(w, p.dir, ["create", "--from", "HEAD", "task-b"]);
-  expect(succeeded(resumed)).toEqual([path]);
+  expect(printedPath(resumed)).toBe(path);
   expect(resumed.stderr).toContain("agent-worktree: worktree task-b exists, so --from HEAD is ignored\n");
   expect(recorded(record)).toEqual([{ name: "task-b", path, primary: p.dir, cwd: path }]);
   expect(ls(w, p.dir)).toEqual([{ name: "task-b", state: "ready", branch: "task-b", path }]);
   const again = run(w, p.dir, ["create", "--from", "HEAD", "task-b"]);
-  expect(succeeded(again)).toEqual([path]);
+  expect(printedPath(again)).toBe(path);
   expect(again.stderr).toContain("agent-worktree: worktree task-b exists, so --from HEAD is ignored\n");
   expect(recorded(record)).toEqual([{ name: "task-b", path, primary: p.dir, cwd: path }]);
 });

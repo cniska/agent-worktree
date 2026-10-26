@@ -7,11 +7,11 @@ import {
   ls,
   PLUGIN,
   pluginCommand,
+  printedLines,
   project,
   refused,
   removeScratchDirs,
   run,
-  succeeded,
   world,
 } from "./harness";
 
@@ -26,13 +26,13 @@ test("AC-18 hook creates on WorktreeCreate and force-removes on WorktreeRemove",
     stdin: hookEvent({ hook_event_name: "WorktreeCreate", name: "task-a" }),
   });
   expect(created.stdout).toBe(`${path}\n`);
-  expect(succeeded(created)).toEqual([path]);
+  expect(printedLines(created)).toEqual([path]);
   expect(ls(w, p.dir)).toEqual([{ name: "task-a", state: "ready", branch: "task-a", path }]);
   writeFileSync(join(path, "untracked"), "work\n");
   const removed = run(w, path, ["hook"], {
     stdin: hookEvent({ hook_event_name: "WorktreeRemove", worktree_path: path }),
   });
-  expect(succeeded(removed)).toEqual(["branch task-a kept, no remote origin"]);
+  expect(printedLines(removed)).toEqual(["branch task-a kept, no remote origin"]);
   expect(existsSync(path)).toBe(false);
   expect(ls(w, p.dir)).toEqual([]);
 });
@@ -110,14 +110,14 @@ test("AC-20 the plugin runs hook for both events and the note on the four sessio
     commandOf("WorktreeCreate"),
     hookEvent({ hook_event_name: "WorktreeCreate", name: "task-a" }),
   );
-  expect(succeeded(created)).toEqual([path]);
+  expect(printedLines(created)).toEqual([path]);
   const removed = pluginCommand(
     w,
     path,
     commandOf("WorktreeRemove"),
     hookEvent({ hook_event_name: "WorktreeRemove", worktree_path: path }),
   );
-  expect(succeeded(removed)).toEqual(["branch task-a kept, no remote origin"]);
+  expect(printedLines(removed)).toEqual(["branch task-a kept, no remote origin"]);
   expect(existsSync(path)).toBe(false);
   const [session] = handlers("SessionStart");
   expect(session?.matcher?.split("|").sort()).toEqual(["clear", "compact", "resume", "startup"]);

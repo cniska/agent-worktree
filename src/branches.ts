@@ -1,3 +1,4 @@
+import type { JsonObject } from "@toon-format/toon";
 import { unreachable } from "./assert";
 import {
   branchRef,
@@ -270,6 +271,42 @@ export function fateText(fate: BranchFate): string {
       return `branch ${fate.branch} kept, deleting ${shortRef(fate.remoteBranch)} failed: ${fate.detail}`;
     case "checked_out":
       return `branch ${fate.branch} kept, checked out at ${fate.at}`;
+    default:
+      return unreachable(fate);
+  }
+}
+
+export function fateRecord(fate: BranchFate): JsonObject {
+  switch (fate.kind) {
+    case "detached":
+      return { branch: null, outcome: fate.kind };
+    case "deleted":
+      return {
+        branch: fate.branch,
+        outcome: fate.kind,
+        landing: fate.landing,
+        into: shortRef(fate.into),
+        remoteBranch: fate.remoteBranch === null ? null : shortRef(fate.remoteBranch),
+      };
+    case "unmerged":
+    case "tracks_default":
+      return { branch: fate.branch, outcome: fate.kind, into: shortRef(fate.into) };
+    case "no_remote":
+    case "no_default_branch":
+      return { branch: fate.branch, outcome: fate.kind, remote: fate.remote };
+    case "remote_unreachable":
+      return { branch: fate.branch, outcome: fate.kind, remote: fate.remote, detail: fate.detail };
+    case "remote_branch_ahead":
+      return { branch: fate.branch, outcome: fate.kind, remoteBranch: shortRef(fate.remoteBranch) };
+    case "remote_branch_kept":
+      return {
+        branch: fate.branch,
+        outcome: fate.kind,
+        remoteBranch: shortRef(fate.remoteBranch),
+        detail: fate.detail,
+      };
+    case "checked_out":
+      return { branch: fate.branch, outcome: fate.kind, at: fate.at };
     default:
       return unreachable(fate);
   }

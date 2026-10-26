@@ -7,12 +7,13 @@ import {
   HOOKS,
   installHook,
   launch,
+  printedPath,
   project,
   refused,
+  removed,
   removeScratchDirs,
   requestPorts,
   run,
-  succeeded,
   world,
 } from "./harness";
 
@@ -23,8 +24,13 @@ const SET_BY_SH = new Set(["PWD", "SHLVL"]);
 test("AC-16 a non-executable or unrunnable hook is refused, and a project without hooks works", () => {
   const w = world();
   const p = project(w);
-  expect(succeeded(run(w, p.dir, ["create", "task-a"]))).toEqual([p.path("task-a")]);
-  expect(succeeded(run(w, p.dir, ["remove", "task-a"]))).toEqual(["branch task-a kept, no remote origin"]);
+  expect(printedPath(run(w, p.dir, ["create", "task-a"]))).toBe(p.path("task-a"));
+  expect(removed(run(w, p.dir, ["remove", "task-a"]))).toEqual({
+    name: "task-a",
+    branch: "task-a",
+    outcome: "no_remote",
+    remote: "origin",
+  });
   expect(existsSync(p.path("task-a"))).toBe(false);
 
   const setup = join(p.dir, HOOKS, "setup");
@@ -52,7 +58,7 @@ test("AC-17 a setup hook's stdout stays off the CLI's stdout", () => {
   const p = project(w);
   installHook(w, p.dir, "setup", "echo installing dependencies");
   const ran = run(w, p.dir, ["create", "task-a"]);
-  expect(succeeded(ran)).toEqual([p.path("task-a")]);
+  expect(printedPath(ran)).toBe(p.path("task-a"));
   expect(ran.stderr).toContain("installing dependencies\n");
 });
 
@@ -65,7 +71,7 @@ test("AC-29 a hook run through the launcher gets the caller's environment and th
   requestPorts(w, p.dir, "10\n");
   const [block] = await freeUnits();
   const launched = launch(w, p.dir, ["create", "task-a"]);
-  expect(succeeded(launched)).toEqual([p.path("task-a")]);
+  expect(printedPath(launched)).toBe(p.path("task-a"));
   const received = Object.entries(JSON.parse(readFileSync(record, "utf8")));
   expect(Object.fromEntries(received.filter(([name]) => !SET_BY_SH.has(name)))).toEqual({
     ...w.env,
