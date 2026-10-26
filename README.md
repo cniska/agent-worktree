@@ -72,3 +72,11 @@ Claude Code makes worktrees of its own, for EnterWorktree and for subagents, wit
 - [Claude Code plugin](docs/plugin.md): what the plugin does and what it needs.
 - [Development](docs/development.md): setup, checks, layout and rules, for working on this repo.
 - [Releasing](docs/releasing.md): the release workflow, the owner's one-time setup and each release's steps.
+
+## Related
+
+agent-worktree works on its own in any agent workflow, and is one of the optional add-ons to [agent-skills](https://github.com/cniska/agent-skills), engineering skills for coding agents. The other add-ons:
+
+- [agent-task](https://github.com/cniska/agent-task): task tracking for coding agents, the tasks running, in review and waiting to run
+- [agent-record](https://github.com/cniska/agent-record): a session record for coding agents, every past session queryable and joined to its commits
+- [agent-gates](https://github.com/cniska/agent-gates): commit gates for coding agents, git hooks and CI checks that refuse a bad commit
