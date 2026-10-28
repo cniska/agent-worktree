@@ -3,9 +3,9 @@ import { CodedError } from "./coded-error";
 
 type Options = { readonly [option: string]: { readonly type: "boolean" | "string" } };
 
-type Values = {
-  readonly [option: string]: string | boolean | readonly (string | boolean)[] | undefined;
-};
+export type OptionValue = string | boolean | readonly (string | boolean)[] | undefined;
+
+type Values = { readonly [option: string]: OptionValue };
 
 export type Output =
   | { readonly kind: "result"; readonly result: JsonValue }

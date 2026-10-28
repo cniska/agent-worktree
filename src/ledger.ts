@@ -110,7 +110,7 @@ function entryOf(project: Project, name: WorktreeName, all: readonly Claim[]): E
   };
 }
 
-export function entries(project: Project): readonly Entry[] {
+export function readEntries(project: Project): readonly Entry[] {
   const all = claims();
   return entryNames(project).map((raw) => entryOf(project, storedName(raw), all));
 }
@@ -148,7 +148,7 @@ function dropClaim(unit: Unit, holder: string): void {
 }
 
 function dropClaims(held: readonly Unit[], holder: string): void {
-  for (const unit of [...held].sort((a, b) => b - a)) dropClaim(unit, holder);
+  for (const unit of held.toSorted((a, b) => b - a)) dropClaim(unit, holder);
 }
 
 type Reclaim = (other: WorktreeName) => boolean;
@@ -270,7 +270,7 @@ function freedUnit(unit: Unit): boolean {
 }
 
 function freeStale(holder: string, stale: readonly Unit[]): void {
-  const freed = blockOfUnits([...stale].sort((a, b) => b - a).filter(freedUnit));
+  const freed = blockOfUnits(stale.toSorted((a, b) => b - a).filter(freedUnit));
   if (freed !== null) note(`port block ${blockText(freed)} freed from ${holder}, which is gone`);
 }
 

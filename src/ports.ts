@@ -60,12 +60,12 @@ export function parsePortRequest(text: string): PortRequest | null {
   return { ports, unitCount: Math.ceil(ports / UNIT_WIDTH) };
 }
 
-function isBlock(units: readonly Unit[]): units is Block {
-  return units.length > 0 && units.slice(1).every((unit, index) => unit > (units[index] ?? unit));
+function isBlock(candidate: readonly Unit[]): candidate is Block {
+  return candidate.length > 0 && candidate.slice(1).every((unit, index) => unit > (candidate[index] ?? unit));
 }
 
 export function blockOfUnits(held: readonly Unit[]): Block | null {
-  const sorted = [...held].sort((a, b) => a - b);
+  const sorted = held.toSorted((a, b) => a - b);
   return isBlock(sorted) ? sorted : null;
 }
 

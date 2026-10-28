@@ -118,7 +118,7 @@ test("AC-34 creates started at once each get a block of their own, and inits of 
   expect(ran.map(printedPath)).toEqual(names.map(p.path));
   const spans = Object.values(lsPorts(w, p.dir))
     .map((text) => (text ?? "").split("-").map(Number))
-    .sort(([a = 0], [b = 0]) => a - b);
+    .toSorted(([a = 0], [b = 0]) => a - b);
   expect(spans.map(([first = 0, last = 0]) => last - first)).toEqual(names.map(() => 19));
   expect(spans.every(([first = 0], index) => index === 0 || first > (spans[index - 1]?.[1] ?? 0))).toBe(true);
   const path = p.path("task-a");

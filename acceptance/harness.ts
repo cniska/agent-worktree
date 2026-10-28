@@ -357,12 +357,12 @@ function isRecord(value: JsonValue): value is JsonObject {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function record(value: JsonValue | undefined): JsonObject {
+function jsonObject(value: JsonValue | undefined): JsonObject {
   if (value === undefined || !isRecord(value)) throw new Error(`${JSON.stringify(value)} is not a record`);
   return value;
 }
 
-function text(value: JsonValue | undefined): string {
+function jsonString(value: JsonValue | undefined): string {
   if (typeof value !== "string") throw new Error(`${JSON.stringify(value)} is not a string`);
   return value;
 }
@@ -370,7 +370,7 @@ function text(value: JsonValue | undefined): string {
 function envelope(toon: string): JsonObject {
   expect(toon).toEndWith("\n");
   expect(toon).not.toEndWith("\n\n");
-  return record(decode(toon));
+  return jsonObject(decode(toon));
 }
 
 export function succeeded(ran: Ran): JsonValue {
@@ -382,13 +382,13 @@ export function succeeded(ran: Ran): JsonValue {
 }
 
 export function printedPath(ran: Ran): string {
-  const result = record(succeeded(ran));
+  const result = jsonObject(succeeded(ran));
   expect(Object.keys(result)).toEqual(["path"]);
-  return text(result.path);
+  return jsonString(result.path);
 }
 
 export function removed(ran: Ran): JsonObject {
-  return record(succeeded(ran));
+  return jsonObject(succeeded(ran));
 }
 
 export type Refusal = { readonly message: string; readonly act: string };
@@ -403,14 +403,14 @@ export function errorOf(ran: Ran, command: string): Printed {
   const shown = envelope(match?.[1] ?? "");
   expect(shown.command).toBe(command);
   expect(shown.ok).toBe(false);
-  const error = record(shown.error);
+  const error = jsonObject(shown.error);
   expect(Object.keys(error)).toEqual(["kind", "code", "message", "meta", "resolve"]);
-  record(error.meta);
+  jsonObject(error.meta);
   return {
-    kind: text(error.kind),
-    code: text(error.code),
-    message: text(error.message),
-    act: text(error.resolve),
+    kind: jsonString(error.kind),
+    code: jsonString(error.code),
+    message: jsonString(error.message),
+    act: jsonString(error.resolve),
   };
 }
 
@@ -446,13 +446,13 @@ function isState(value: JsonValue | undefined): value is Listed["state"] {
 type ListedFull = Listed & { readonly ports: string | null };
 
 function nullable(value: JsonValue | undefined): string | null {
-  return value === null ? null : text(value);
+  return value === null ? null : jsonString(value);
 }
 
 function rows(listing: JsonValue): readonly JsonObject[] {
-  const { worktrees } = record(listing);
+  const { worktrees } = jsonObject(listing);
   if (!Array.isArray(worktrees)) throw new Error(`${JSON.stringify(worktrees)} is not a list`);
-  return worktrees.map(record);
+  return worktrees.map(jsonObject);
 }
 
 function listed(w: World, dir: string): readonly ListedFull[] {
@@ -461,15 +461,21 @@ function listed(w: World, dir: string): readonly ListedFull[] {
   const records = rows(full).map((row) => {
     expect(Object.keys(row)).toEqual(["name", "state", "branch", "ports", "path"]);
     const { name, state, branch, ports, path } = row;
-    if (!isState(state)) throw new Error(`${String(state)} is not a state ls prints`);
-    return { name: text(name), state, branch: nullable(branch), ports: nullable(ports), path: text(path) };
+    if (!isState(state)) throw new Error(`${JSON.stringify(state)} is not a state ls prints`);
+    return {
+      name: jsonString(name),
+      state,
+      branch: nullable(branch),
+      ports: nullable(ports),
+      path: jsonString(path),
+    };
   });
   expect(rows(brief)).toEqual(records.map(({ name, state, path }) => ({ name, state, path })));
   const counts = Object.fromEntries(
     STATES.map((state) => [state, records.filter((each) => each.state === state).length] as const),
   );
-  expect(record(brief).counts).toEqual(counts);
-  expect(record(full).counts).toEqual(counts);
+  expect(jsonObject(brief).counts).toEqual(counts);
+  expect(jsonObject(full).counts).toEqual(counts);
   return records;
 }
 

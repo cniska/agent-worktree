@@ -32,7 +32,7 @@ import {
   blockOf,
   claimBlock,
   type Entry,
-  entries,
+  readEntries,
   freeStaleBlocks,
   markReady,
   register,
@@ -199,7 +199,7 @@ type Snapshot = {
 function snapshot(project: Project): Snapshot {
   return {
     found: directoryEntries(worktreesDir(project)),
-    entries: entries(project),
+    entries: readEntries(project),
     listed: listing(project),
   };
 }
@@ -521,7 +521,7 @@ export function list(project: Project): readonly Listed[] {
       invariant(state.kind !== "absent", `${name} is in the snapshot`);
       return { path: pathOf(project, state), state };
     })
-    .sort(byName);
+    .toSorted(byName);
 }
 
 function pathOf(project: Project, state: Listed["state"]): string {

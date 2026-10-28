@@ -107,7 +107,16 @@ function refusal(ran: Ran): Refusal {
   });
   const error = isObject(printed) ? printed.error : undefined;
   if (error === undefined || !isObject(error)) throw new Error(`${ran.stderr} holds no error`);
-  return { code: String(error.code), message: String(error.message), resolve: String(error.resolve) };
+  return {
+    code: jsonString(error.code),
+    message: jsonString(error.message),
+    resolve: jsonString(error.resolve),
+  };
+}
+
+function jsonString(value: JsonValue | undefined): string {
+  if (typeof value !== "string") throw new Error(`${JSON.stringify(value)} is not a string`);
+  return value;
 }
 
 describe.each<Layout>(["nested", "hoisted"])("the launcher over the %s layout", (layout) => {

@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { version } from "../package.json";
+import { version as packageVersion } from "../package.json";
 
 export type Candidate = { readonly tag: string; readonly version: string };
 
@@ -40,7 +40,7 @@ function git(args: readonly string[]): { readonly ok: boolean; readonly out: str
   return { ok: ran.status === 0, out: ran.stdout.trim() };
 }
 
-function previousTag(tag: string): string | null {
+function previousTagOf(tag: string): string | null {
   const tagged = git(["rev-parse", "--quiet", "--verify", `refs/tags/${tag}`]).ok;
   const before = tagged ? `${tag}^` : "HEAD";
   const described = git(["describe", "--tags", "--abbrev=0", "--match", `${TAG_PREFIX}*`, before]);
@@ -53,8 +53,8 @@ if (import.meta.main) {
     process.stderr.write("usage: bun scripts/release-check.ts <tag>\n");
     process.exit(2);
   }
-  const problems = releaseProblems({ tag, version }, previousTag(tag));
+  const problems = releaseProblems({ tag, version: packageVersion }, previousTagOf(tag));
   for (const problem of problems) process.stderr.write(`release-check: ${problem}\n`);
   if (problems.length > 0) process.exit(1);
-  console.log(`${tag} is a release of ${version}`);
+  console.log(`${tag} is a release of ${packageVersion}`);
 }

@@ -43,7 +43,7 @@ function projectOf({ toplevel, gitDir, commonDir }: GitPlaces): Project {
   return { primary, commonDir };
 }
 
-export function project(cwd: string): Project {
+export function resolveProject(cwd: string): Project {
   return projectOf(gitPlaces(cwd));
 }
 

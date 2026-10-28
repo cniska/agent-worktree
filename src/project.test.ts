@@ -1,25 +1,25 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { mkdirSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
-import { nameAt, parseName, project, worktreePath, worktreesDir } from "./project";
+import { nameAt, parseName, resolveProject, worktreePath, worktreesDir } from "./project";
 import { git, projectAt, refusal, removeScratchDirs, repo, scratchDir } from "./repo.test-support";
 
 afterAll(removeScratchDirs);
 
-describe("project", () => {
+describe("resolveProject", () => {
   test("resolves the primary from inside it and from inside one of its worktrees", () => {
     const dir = repo();
     const worktree = join(dir, ".claude", "worktrees", "task-a");
     git(dir, ["worktree", "add", "-q", worktree, "-b", "task-a"]);
-    expect(project(dir)).toEqual(projectAt(dir));
-    expect(project(worktree)).toEqual(projectAt(dir));
+    expect(resolveProject(dir)).toEqual(projectAt(dir));
+    expect(resolveProject(worktree)).toEqual(projectAt(dir));
   });
 
   test("refuses a checkout whose git directory is not the primary's .git, such as a submodule", () => {
     const dir = repo();
     const sub = repo();
     git(dir, ["-c", "protocol.file.allow=always", "submodule", "add", "-q", sub, "vendored"]);
-    const refused = refusal(() => project(join(dir, "vendored")));
+    const refused = refusal(() => resolveProject(join(dir, "vendored")));
     expect(refused.code).toBe("unsupported_layout");
     expect(refused.message).toBe(
       `${join(dir, ".git", "modules", "vendored")} is not a .git directory inside the primary checkout`,
@@ -34,7 +34,7 @@ describe("project", () => {
     const elsewhere = join(base, "elsewhere", ".git");
     mkdirSync(join(base, "elsewhere"));
     git(base, ["init", "-q", `--separate-git-dir=${elsewhere}`, join(base, "repo")]);
-    const refused = refusal(() => project(join(base, "repo")));
+    const refused = refusal(() => resolveProject(join(base, "repo")));
     expect(refused.code).toBe("unsupported_layout");
     expect(refused.message).toBe(`${elsewhere} is not a .git directory inside the primary checkout`);
   });
@@ -53,11 +53,11 @@ describe("worktreesDir", () => {
     const dir = repo();
     const worktree = join(dir, ".claude", "worktrees", "task-a");
     git(dir, ["worktree", "add", "-q", worktree, "-b", "task-a"]);
-    const key = worktreesDir(project(dir));
+    const key = worktreesDir(resolveProject(dir));
     expect(dirname(key)).toBe(join(process.env.XDG_DATA_HOME ?? "", "agent-worktree"));
     expect(basename(key)).toMatch(/^repo-[0-9a-f]{8}$/);
-    expect(worktreesDir(project(worktree))).toBe(key);
-    expect(worktreesDir(project(dir))).toBe(key);
+    expect(worktreesDir(resolveProject(worktree))).toBe(key);
+    expect(worktreesDir(resolveProject(dir))).toBe(key);
   });
 
   test("tells apart two clones that share a directory name", () => {

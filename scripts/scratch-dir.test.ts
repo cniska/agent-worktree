@@ -27,7 +27,7 @@ function testFiles(): readonly Source[] {
   )
     .filter((path) => path !== SELF && helperFor(path) !== null)
     .map((path) => ({ path, text: readFileSync(join(ROOT, path), "utf8") }))
-    .sort((a, b) => a.path.localeCompare(b.path));
+    .toSorted((a, b) => a.path.localeCompare(b.path));
 }
 
 function ownScratchDirs({ path, text }: Source): readonly string[] {

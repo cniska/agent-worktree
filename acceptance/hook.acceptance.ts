@@ -120,7 +120,7 @@ test("AC-20 the plugin runs hook for both events and the note on the four sessio
   expect(printedLines(removed)).toEqual(["branch task-a kept, no remote origin"]);
   expect(existsSync(path)).toBe(false);
   const [session] = handlers("SessionStart");
-  expect(session?.matcher?.split("|").sort()).toEqual(["clear", "compact", "resume", "startup"]);
+  expect(session?.matcher?.split("|").toSorted()).toEqual(["clear", "compact", "resume", "startup"]);
   const note = pluginCommand(w, p.dir, commandOf("SessionStart"));
   expect(note).toEqual({
     exitCode: 0,

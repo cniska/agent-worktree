@@ -2,11 +2,18 @@ import { readFileSync } from "node:fs";
 import type { JsonObject } from "@toon-format/toon";
 import { unreachable } from "./assert";
 import { fateRecord, fateText } from "./branches";
-import { type Command, result, usageRefusal } from "./cli-contract";
+import { type Command, type OptionValue, result, usageRefusal } from "./cli-contract";
 import { parseEvent } from "./event";
 import { install } from "./hooks";
 import { blockText, PORT_LIMIT, type PortRequest, parsePortRequest } from "./ports";
-import { checkout, type Project, parseName, project, type WorktreeName, worktreePath } from "./project";
+import {
+  checkout,
+  type Project,
+  parseName,
+  resolveProject,
+  type WorktreeName,
+  worktreePath,
+} from "./project";
 import { create, init, type Listed, list, prune, remove } from "./worktrees";
 
 function noPositionals(positionals: readonly string[], command: Command): void {
@@ -27,7 +34,7 @@ function namedTarget(
       `agent-worktree ${command.name} takes one worktree name, and got: ${positionals.join(" ")}`,
       command.usage,
     );
-  const current = project(process.cwd());
+  const current = resolveProject(process.cwd());
   return { project: current, name: parseName(current, raw) };
 }
 
@@ -67,13 +74,13 @@ function stateCounts(listed: readonly Listed[]): JsonObject {
 }
 
 function listing(full: boolean): JsonObject {
-  const listed = list(project(process.cwd()));
+  const listed = list(resolveProject(process.cwd()));
   return { counts: stateCounts(listed), worktrees: listed.map((each) => listedRecord(each, full)) };
 }
 
 type StringOption = { readonly option: string; readonly takes: string };
 
-function stringOption(value: unknown, { option, takes }: StringOption, command: Command): string | null {
+function stringOption(value: OptionValue, { option, takes }: StringOption, command: Command): string | null {
   if (value === undefined) return null;
   if (typeof value !== "string" || value === "")
     throw usageRefusal(
@@ -185,7 +192,7 @@ const hookCommand: Command = {
   },
 };
 
-function portsOption(value: unknown, command: Command): PortRequest | null {
+function portsOption(value: OptionValue, command: Command): PortRequest | null {
   if (value === undefined) return null;
   const request = typeof value === "string" ? parsePortRequest(value) : null;
   if (request === null)

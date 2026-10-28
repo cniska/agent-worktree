@@ -13,9 +13,6 @@
     "typescript/no-floating-promises": "error",
     "typescript/switch-exhaustiveness-check": "error",
     "typescript/no-unsafe-type-assertion": "error",
-    "oxc/no-barrel-file": "error",
-    "eslint/no-shadow": "off",
-    "typescript/no-base-to-string": "off",
-    "unicorn/no-array-sort": "off"
+    "oxc/no-barrel-file": "error"
   }
 }
