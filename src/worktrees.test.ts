@@ -792,15 +792,15 @@ describe("init", () => {
   });
 });
 
-describe("a worktree in the earlier location", () => {
-  function legacy(f: Fixture, raw: string): string {
-    const path = join(f.dir, ".claude", "worktrees", raw);
-    git(f.dir, ["worktree", "add", "-q", path, "-b", raw]);
-    mkdirSync(join(f.dir, ".git", "agent-worktrees", raw), { recursive: true });
-    writeFileSync(join(f.dir, ".git", "agent-worktrees", raw, "ready"), "");
-    return path;
-  }
+function legacy(f: Fixture, raw: string): string {
+  const path = join(f.dir, ".claude", "worktrees", raw);
+  git(f.dir, ["worktree", "add", "-q", path, "-b", raw]);
+  mkdirSync(join(f.dir, ".git", "agent-worktrees", raw), { recursive: true });
+  writeFileSync(join(f.dir, ".git", "agent-worktrees", raw, "ready"), "");
+  return path;
+}
 
+describe("a worktree in the earlier location", () => {
   test("is listed where it is", () => {
     const f = fixture();
     const old = legacy(f, "task-a");
@@ -1152,8 +1152,8 @@ describe("port requests", () => {
       create(f.project, f.name("task-a"), { here: f.dir, from: null }),
       create(f.project, f.name("task-b"), { here: f.dir, from: null }),
     ]);
-    const firsts = [firstUnitOf(f, "task-a"), firstUnitOf(f, "task-b")].sort();
-    expect(firsts).toEqual([first, unitAt(first, 1)]);
+    const firsts = new Set([firstUnitOf(f, "task-a"), firstUnitOf(f, "task-b")]);
+    expect(firsts).toEqual(new Set([first, unitAt(first, 1)]));
   });
 
   test("prune frees a gone holder's units that are not one run, noting each run", async () => {

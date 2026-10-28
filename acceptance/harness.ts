@@ -336,7 +336,7 @@ export function keyOf(w: World, path: string): string {
   return dirname(path).slice(w.data.length + 1);
 }
 
-export type Project = { readonly dir: string; path(name: string): string };
+export type Project = { readonly dir: string; readonly path: (name: string) => string };
 
 export function project(w: World): Project {
   const dir = repo(w);

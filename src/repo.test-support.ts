@@ -110,8 +110,8 @@ export type Fixture = {
   readonly project: Project;
   readonly setupRecord: string;
   readonly teardownRecord: string;
-  name(raw: string): WorktreeName;
-  path(raw: string): string;
+  readonly name: (raw: string) => WorktreeName;
+  readonly path: (raw: string) => string;
 };
 
 export async function freeUnits(): Promise<readonly Unit[]> {

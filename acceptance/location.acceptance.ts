@@ -17,6 +17,10 @@ import {
 
 afterEach(removeScratchDirs);
 
+function underHome(home: string): string {
+  return `${home}/.local/share/agent-worktree/`;
+}
+
 test("AC-1 create and path print the worktree's place under XDG_DATA_HOME, outside the primary", () => {
   const w = world();
   const p = project(w);
@@ -31,7 +35,6 @@ test("AC-1 create and path print the worktree's place under XDG_DATA_HOME, outsi
 test("AC-2 an unset, empty or relative XDG_DATA_HOME falls back to HOME, and an unset or empty HOME to the account's home", () => {
   const w = world();
   const dir = repo(w);
-  const underHome = (home: string) => `${home}/.local/share/agent-worktree/`;
   const pathWith = (env: Record<string, string>, unset: readonly string[] = []) => {
     const printed = printedPath(run(w, dir, ["path", "task-a"], { env, unset }));
     return printed;
