@@ -19,3 +19,14 @@ jobs:
       - uses: jdx/mise-action@v5
       - run: bun run check
       - run: actionlint
+
+  acceptance:
+    name: Acceptance
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: jdx/mise-action@v5
+      - run: bun run acceptance
