@@ -6,7 +6,7 @@ type Env = Readonly<Record<string, string | undefined>>;
 
 const DATA_NAME = "agent-worktree";
 
-function homeDir(env: Env): string {
+export function homeDir(env: Env): string {
   const home = env.HOME;
   return home !== undefined && home.trim() !== "" ? home : homedir();
 }

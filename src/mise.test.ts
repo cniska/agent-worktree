@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { chmodSync, existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
 import { trustLikePrimary } from "./mise";
 import { removeScratchDirs, scratchDir } from "./repo.test-support";
 
@@ -125,6 +125,25 @@ describe("trustLikePrimary", () => {
       trustLikePrimary(primary, checkout);
     }
     expect(calls()).toEqual(Array.from({ length: 4 }, () => "trust --show"));
+  });
+
+  test("reads the primary's line as mise shortens it under HOME", () => {
+    const { checkout } = trustedPrimary();
+    const home = process.env.HOME ?? "";
+    const primary = join(home, "code", basename(checkout));
+    write(primary, "mise.toml");
+    write(checkout, "mise.toml");
+    shows(`~/code/${basename(checkout)}: trusted\n`);
+    trustLikePrimary(primary, checkout);
+    expect(calls()).toEqual(["trust --show", `trust --quiet ${checkout}`]);
+  });
+
+  test("trusts nothing, and never throws, when a config cannot be read", () => {
+    const { primary, checkout } = trustedPrimary();
+    write(primary, "mise.toml");
+    symlinkSync(join(checkout, "gone.toml"), join(checkout, "mise.toml"));
+    trustLikePrimary(primary, checkout);
+    expect(calls()).toEqual([]);
   });
 
   test("never throws when mise trust fails", () => {

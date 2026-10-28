@@ -6,6 +6,7 @@ import { systemErrorCode } from "./coded-error";
 import { directoryEntries } from "./directory";
 import { exitOf, succeeded } from "./exit";
 import { note } from "./log";
+import { homeDir } from "./paths";
 
 const NAMED_CONFIG_DIRS = ["", ".config"];
 
@@ -16,6 +17,10 @@ const MISE_NAME = /mise|rtx/;
 const TOML = /\.toml$/;
 
 const ABSENT = "ENOENT";
+
+const UNREADABLE = new Set([ABSENT, "EISDIR", "ELOOP", "ENOTDIR", "EACCES"]);
+
+const HOME_MARK = "~";
 
 function filesIn(root: string, dir: string, keep: (name: string) => boolean): readonly string[] {
   return directoryEntries(join(root, dir))
@@ -34,15 +39,18 @@ function contentOf(file: string): Buffer | null {
   try {
     return readFileSync(file);
   } catch (error) {
-    if (systemErrorCode(error) === ABSENT) return null;
+    const code = systemErrorCode(error);
+    if (code !== null && UNREADABLE.has(code)) return null;
     throw error;
   }
 }
 
 function samePrimaryConfigs(primary: string, checkout: string, configs: readonly string[]): boolean {
-  return configs.every(
-    (config) => contentOf(join(primary, config))?.equals(readFileSync(join(checkout, config))) === true,
-  );
+  return configs.every((config) => {
+    const theirs = contentOf(join(primary, config));
+    const ours = contentOf(join(checkout, config));
+    return theirs !== null && ours !== null && theirs.equals(ours);
+  });
 }
 
 type Ran =
@@ -57,9 +65,16 @@ function mise(cwd: string, args: readonly string[]): Ran {
   return succeeded(exitOf(ran)) ? { kind: "ran", stdout: ran.stdout } : { kind: "failed" };
 }
 
+function shownPaths(dir: string): readonly string[] {
+  const home = homeDir(process.env);
+  return dir.startsWith(home) ? [dir, `${HOME_MARK}${dir.slice(home.length)}`] : [dir];
+}
+
 function primaryTrusted(primary: string): boolean {
   const shown = mise(primary, ["trust", "--show"]);
-  return shown.kind === "ran" && shown.stdout.split("\n").includes(`${primary}: trusted`);
+  if (shown.kind !== "ran") return false;
+  const lines = shown.stdout.split("\n");
+  return shownPaths(primary).some((path) => lines.includes(`${path}: trusted`));
 }
 
 export function trustLikePrimary(primary: string, checkout: string): void {

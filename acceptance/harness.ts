@@ -300,8 +300,8 @@ export function keyOf(w: World, path: string): string {
 
 export type Project = { readonly dir: string; path(name: string): string };
 
-export function project(w: World): Project {
-  const dir = repo(w);
+export function project(w: World, at?: string): Project {
+  const dir = repo(w, at);
   const probe = printedPath(run(w, dir, ["path", "probe"]));
   const key = keyOf(w, probe);
   return { dir, path: (name) => join(w.data, key, name) };

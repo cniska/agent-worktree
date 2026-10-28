@@ -5,6 +5,7 @@ import {
   git,
   installHook,
   ls,
+  type Project,
   printedPath,
   project,
   type Ran,
@@ -36,7 +37,12 @@ function trust(w: World, dir: string): void {
 }
 
 function trusted(w: World, dir: string): boolean {
-  return mise(w, dir, ["trust", "--show"]).stdout.split("\n").includes(`${dir}: trusted`);
+  const shown = dir.startsWith(w.home) ? `~${dir.slice(w.home.length)}` : dir;
+  return mise(w, dir, ["trust", "--show"]).stdout.split("\n").includes(`${shown}: trusted`);
+}
+
+function homeProject(w: World): Project {
+  return project(w, join(w.home, "code", "repo"));
 }
 
 function commitFile(w: World, checkout: string, file: string, text: string): void {
@@ -52,7 +58,7 @@ function trustLines(ran: Ran): readonly string[] {
 
 test("AC-57 create and init trust a worktree's mise config that matches its trusted primary, before setup", () => {
   const w = world();
-  const p = project(w);
+  const p = homeProject(w);
   commitFile(w, p.dir, "mise.toml", UNSAFE_CONFIG);
   commitFile(w, p.dir, ".config/mise/conf.d/extra.toml", UNSAFE_CONFIG);
   installHook(w, p.dir, "setup", READS_CONFIG);
@@ -93,7 +99,7 @@ test("AC-57 create and init trust a worktree's mise config that matches its trus
 
 test("AC-57 a worktree whose mise config differs from its trusted primary's stays untrusted", () => {
   const w = world();
-  const p = project(w);
+  const p = homeProject(w);
   commitFile(w, p.dir, "mise.toml", UNSAFE_CONFIG);
   installHook(w, p.dir, "setup", READS_CONFIG);
   trust(w, p.dir);
@@ -112,7 +118,7 @@ test("AC-57 a worktree whose mise config differs from its trusted primary's stay
 
 test("AC-57 create trusts nothing without mise, without config, or with an untrusted primary, and names a failed trust", () => {
   const w = world();
-  const p = project(w);
+  const p = homeProject(w);
   const bare = run(w, p.dir, ["create", "no-config"]);
   expect(printedPath(bare)).toBe(p.path("no-config"));
   expect(trustLines(bare)).toEqual([]);
