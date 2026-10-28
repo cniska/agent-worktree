@@ -42,7 +42,11 @@ type Env = Readonly<Record<string, string>>;
 
 const TIMED_OUT = "ETIMEDOUT";
 
-function spawnGit(repo: string, args: readonly string[], env: Env, timeout: number | undefined) {
+const HALF_MADE_WORKTREE = /\/worktrees\/[^/\s]+\/commondir: /;
+
+const HALF_MADE_TRIES = 50;
+
+function spawnGitOnce(repo: string, args: readonly string[], env: Env, timeout: number | undefined) {
   return spawnSync("git", ["-C", repo, ...args], {
     encoding: "utf8",
     env: { ...process.env, ...env },
@@ -51,6 +55,24 @@ function spawnGit(repo: string, args: readonly string[], env: Env, timeout: numb
     timeout,
     killSignal: "SIGKILL",
   });
+}
+
+type Spawned = ReturnType<typeof spawnGitOnce>;
+
+function metHalfMadeWorktree(run: Spawned): boolean {
+  return run.error === undefined && run.status !== 0 && HALF_MADE_WORKTREE.test(run.stderr);
+}
+
+function spawnGit(repo: string, args: readonly string[], env: Env, timeout: number | undefined): Spawned {
+  const deadline = timeout === undefined ? null : performance.now() + timeout;
+  const remaining = () =>
+    deadline === null ? undefined : Math.max(1, Math.ceil(deadline - performance.now()));
+  const attempt = (tries: number): Spawned => {
+    const run = spawnGitOnce(repo, args, env, remaining());
+    const timeLeft = deadline === null || performance.now() < deadline;
+    return tries > 1 && timeLeft && metHalfMadeWorktree(run) ? attempt(tries - 1) : run;
+  };
+  return attempt(HALF_MADE_TRIES);
 }
 
 function git(repo: string, args: readonly string[], env: Env = {}): GitRun {
@@ -130,7 +152,8 @@ export function checkoutWorktree(repo: string, path: string, branch: string): vo
 }
 
 export function cutWorktree(repo: string, path: string, branch: string, base: string): void {
-  gitOrRefusal(repo, ["worktree", "add", "--no-track", "-b", branch, path, base]);
+  gitOrRefusal(repo, ["branch", "--no-track", branch, base]);
+  checkoutWorktree(repo, path, branch);
 }
 
 export function worktreeRemoval(repo: string, path: string, force: boolean): GitRefusal | null {

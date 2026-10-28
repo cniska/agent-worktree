@@ -13,6 +13,7 @@ import {
   freeUnits,
   git,
   HOOKS,
+  halfMadeDuring,
   hook,
   projectAt,
   recorded,
@@ -1243,5 +1244,76 @@ describe("port requests", () => {
     rmSync(join(path, HOOKS, "ports"));
     await init(f.project, path);
     expect(blockOf(f, "task-a")).toBeNull();
+  });
+});
+
+describe("a worktree another process has half made", () => {
+  test("is waited out by list, which then reads every worktree", async () => {
+    const f = fixture();
+    await create(f.project, f.name("task-a"), { here: f.dir, from: null });
+    const other = halfMadeDuring(f.dir, "worktree list", "once");
+    const listed = await other.onPath(() => list(f.project));
+    expect(listed.map((item) => [item.path, item.state.kind])).toEqual([[f.path("task-a"), "ready"]]);
+    expect(other.runs()).toBe(2);
+  });
+
+  test("is waited out by create cutting a new branch, which leaves one branch and a ready worktree", async () => {
+    const f = fixture();
+    const other = halfMadeDuring(f.dir, "worktree add", "once");
+    const path = await other.onPath(() => create(f.project, f.name("task-a"), { here: f.dir, from: null }));
+    expect(path).toBe(f.path("task-a"));
+    expect(git(path, ["branch", "--show-current"])).toBe("task-a");
+    expect(stateKind(f, "task-a")).toBe("ready");
+    expect(other.runs()).toBe(2);
+  });
+
+  test("is waited out by create checking out an existing branch", async () => {
+    const f = fixture();
+    git(f.dir, ["branch", "task-a"]);
+    const other = halfMadeDuring(f.dir, "worktree add", "once");
+    const path = await other.onPath(() => create(f.project, f.name("task-a"), { here: f.dir, from: null }));
+    expect(git(path, ["branch", "--show-current"])).toBe("task-a");
+    expect(stateKind(f, "task-a")).toBe("ready");
+    expect(other.runs()).toBe(2);
+  });
+
+  test("is waited out by create fetching origin's default branch", async () => {
+    const f = fixture();
+    const bare = withRemote(f.dir, "origin");
+    const tip = pushedPast(f, bare);
+    const other = halfMadeDuring(f.dir, "fetch", "once");
+    const path = await other.onPath(() => create(f.project, f.name("task-a"), { here: f.dir, from: null }));
+    expect(git(path, ["rev-parse", "HEAD"])).toBe(tip);
+    expect(other.runs()).toBe(2);
+  });
+
+  test("is waited out by remove", async () => {
+    const f = fixture();
+    const path = await create(f.project, f.name("task-a"), { here: f.dir, from: null });
+    const other = halfMadeDuring(f.dir, "worktree remove", "once");
+    await other.onPath(() => remove(f.project, f.name("task-a"), false));
+    expect(existsSync(path)).toBe(false);
+    expect(list(f.project)).toEqual([]);
+    expect(other.runs()).toBe(2);
+  });
+
+  test("that is never finished fails with git's own error after 50 tries", async () => {
+    const f = fixture();
+    const other = halfMadeDuring(f.dir, "worktree list", "always");
+    const refused = await rejection(() => other.onPath(() => list(f.project)));
+    expect(refused.code).toBe("git_failed");
+    expect(refused.message).toStartWith("git worktree list --porcelain exited 128: fatal: failed to read");
+    expect(refused.message).toContain("/worktrees/other/commondir");
+    expect(other.runs()).toBe(50);
+  });
+
+  test("is not the cause of another git refusal, which create meets once", async () => {
+    const f = fixture();
+    const other = halfMadeDuring(f.dir, "worktree add", "never");
+    const refused = await rejection(() =>
+      other.onPath(() => create(f.project, f.name("main"), { here: f.dir, from: null })),
+    );
+    expect(refused.code).toBe("git_refused");
+    expect(other.runs()).toBe(1);
   });
 });

@@ -12,6 +12,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { unreachable } from "./assert";
 import { CodedError } from "./coded-error";
 import { type Block, blockOfUnits, isInUse, parseUnit, type Unit, units } from "./ports";
 import { type Project, parseName, type WorktreeName, worktreePath } from "./project";
@@ -194,6 +195,72 @@ export function hookEvent(fields: Record<string, string>): string {
     cwd: "/checkout",
     ...fields,
   });
+}
+
+export type HalfMaking = "once" | "always" | "never";
+
+export type HalfMadeGit = {
+  readonly runs: () => number;
+  readonly onPath: <T>(run: () => Promise<T> | T) => Promise<T>;
+};
+
+function halfMakingSteps(making: HalfMaking, commondir: string, real: string, marker: string): string {
+  switch (making) {
+    case "never":
+      return `exec '${real}' "$@"`;
+    case "always":
+      return [`: > '${commondir}'`, `exec '${real}' "$@"`].join("\n");
+    case "once":
+      return [
+        `[ -e '${marker}' ] && exec '${real}' "$@"`,
+        `saved=$(cat '${commondir}')`,
+        `: > '${commondir}'`,
+        `'${real}' "$@"`,
+        "status=$?",
+        `printf '%s\\n' "$saved" > '${commondir}'`,
+        `touch '${marker}'`,
+        'exit "$status"',
+      ].join("\n");
+    default:
+      return unreachable(making);
+  }
+}
+
+export function halfMadeDuring(
+  primary: string,
+  command: string,
+  making: HalfMaking,
+  stallSeconds = 0,
+): HalfMadeGit {
+  const real = Bun.which("git");
+  if (real === null) throw new Error("git is not on PATH");
+  const scratch = scratchDir();
+  git(primary, ["worktree", "add", "-q", join(scratch, "other")]);
+  const commondir = join(primary, ".git", "worktrees", "other", "commondir");
+  const log = join(scratch, "runs");
+  const bin = join(scratch, "bin");
+  mkdirSync(bin);
+  const script = [
+    "#!/bin/sh",
+    `case "$3 $4 " in '${command} '*) ;; *) exec '${real}' "$@" ;; esac`,
+    `echo run >> '${log}'`,
+    `sleep ${stallSeconds}`,
+    halfMakingSteps(making, commondir, real, join(scratch, "made")),
+  ].join("\n");
+  writeFileSync(join(bin, "git"), `${script}\n`);
+  chmodSync(join(bin, "git"), 0o755);
+  return {
+    runs: () => (existsSync(log) ? recorded(log).length : 0),
+    onPath: async (run) => {
+      const path = process.env.PATH;
+      process.env.PATH = `${bin}:${path}`;
+      try {
+        return await run();
+      } finally {
+        process.env.PATH = path;
+      }
+    },
+  };
 }
 
 export function refusal(run: () => unknown): CodedError {

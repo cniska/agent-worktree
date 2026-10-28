@@ -4,8 +4,10 @@ import { join } from "node:path";
 import {
   bareRemote,
   commitIn,
+  errorOf,
   git,
   HOOKS,
+  halfMadeGit,
   installHook,
   ls,
   printedPath,
@@ -322,4 +324,29 @@ test("AC-55 create --from refuses an existing branch, and is ignored, noted, on 
   expect(printedPath(again)).toBe(path);
   expect(again.stderr).toContain("agent-worktree: worktree task-b exists, so --from HEAD is ignored\n");
   expect(recorded(record)).toEqual([{ name: "task-b", path, primary: p.dir, cwd: path }]);
+});
+
+test("AC-57 create, ls and remove wait out another worktree half made, and a worktree that stays half made fails ls with git's own error", () => {
+  const w = world();
+  const p = project(w);
+  bareRemote(w, p.dir);
+  git(w, p.dir, ["branch", "task-c"]);
+  const during = (command: string, args: readonly string[]) => {
+    const other = halfMadeGit(w, p.dir, command, "once");
+    const ran = run(w, p.dir, args, { env: { PATH: other.path } });
+    expect(other.runs()).toBe(2);
+    return ran;
+  };
+  expect(printedPath(during("fetch", ["create", "task-a"]))).toBe(p.path("task-a"));
+  expect(printedPath(during("worktree add", ["create", "task-b"]))).toBe(p.path("task-b"));
+  expect(printedPath(during("worktree add", ["create", "task-c"]))).toBe(p.path("task-c"));
+  succeeded(during("worktree list", ["ls"]));
+  expect(removed(during("worktree remove", ["remove", "task-a"]))).toMatchObject({ name: "task-a" });
+  expect(ls(w, p.dir).map((item) => item.name)).toEqual(["task-b", "task-c"]);
+  const stuck = halfMadeGit(w, p.dir, "worktree list", "always");
+  const ran = run(w, p.dir, ["ls"], { env: { PATH: stuck.path } });
+  expect(errorOf(ran, "ls").message).toStartWith(
+    "git worktree list --porcelain exited 128: fatal: failed to read .git/worktrees/other/commondir: ",
+  );
+  expect(stuck.runs()).toBe(50);
 });

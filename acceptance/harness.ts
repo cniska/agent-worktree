@@ -243,6 +243,44 @@ export function bareRemote(w: World, dir: string): string {
   return bare;
 }
 
+export type HalfMadeGit = { readonly path: string; readonly runs: () => number };
+
+export function halfMadeGit(
+  w: World,
+  primary: string,
+  command: string,
+  making: "once" | "always",
+): HalfMadeGit {
+  const real = Bun.which("git", { PATH: w.env.PATH });
+  if (real === null) throw new Error("git is not on PATH");
+  const other = join(w.root, "other");
+  if (!existsSync(other)) git(w, primary, ["worktree", "add", "-q", other]);
+  const commondir = join(primary, ".git", "worktrees", "other", "commondir");
+  const dir = mkdtempSync(join(w.root, "half-made-"));
+  const log = join(dir, "runs");
+  const marker = join(dir, "made");
+  const finish = making === "once" ? [`printf '%s\\n' "$saved" > '${commondir}'`, `touch '${marker}'`] : [];
+  const script = [
+    "#!/bin/sh",
+    `case "$3 $4 " in '${command} '*) ;; *) exec '${real}' "$@" ;; esac`,
+    `echo run >> '${log}'`,
+    `[ -e '${marker}' ] && exec '${real}' "$@"`,
+    `saved=$(cat '${commondir}')`,
+    `: > '${commondir}'`,
+    `'${real}' "$@"`,
+    "status=$?",
+    ...finish,
+    'exit "$status"',
+  ].join("\n");
+  mkdirSync(join(dir, "bin"));
+  writeFileSync(join(dir, "bin", "git"), `${script}\n`);
+  chmodSync(join(dir, "bin", "git"), 0o755);
+  return {
+    path: `${join(dir, "bin")}:${w.env.PATH}`,
+    runs: () => (existsSync(log) ? readFileSync(log, "utf8").split("\n").length - 1 : 0),
+  };
+}
+
 export type HookName = "setup" | "teardown";
 
 export function installHook(w: World, checkout: string, hook: HookName, body: string): void {

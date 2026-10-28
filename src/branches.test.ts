@@ -2,7 +2,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { chmodSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fateText, remotesOf, settleBranch } from "./branches";
-import { git, removeScratchDirs, repo, scratchDir, withRemote } from "./repo.test-support";
+import { git, halfMadeDuring, removeScratchDirs, repo, scratchDir, withRemote } from "./repo.test-support";
 
 afterAll(removeScratchDirs);
 
@@ -354,5 +354,18 @@ describe("remotes", () => {
     git(dir, ["remote", "set-url", "origin", join(scratchDir(), "missing.git")]);
     expect(remotes.view("origin")).toBe(first);
     expect(first.kind).toBe("reached");
+  });
+});
+
+describe("a fetch another process's half-made worktree keeps failing", () => {
+  test("is rerun only within the timeout, then keeps the branch", async () => {
+    const dir = repo();
+    withRemote(dir, "origin");
+    topic(dir, "task-a", "work");
+    const other = halfMadeDuring(dir, "fetch", "always", 0.1);
+    const fate = await other.onPath(() => settleBranch(dir, "task-a", remotesOf(dir, 250)));
+    expect(fateText(fate)).toStartWith("branch task-a kept, origin could not be reached: ");
+    expect(other.runs()).toBeLessThanOrEqual(3);
+    expect(localBranches(dir)).toBe("task-a");
   });
 });
