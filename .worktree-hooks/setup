@@ -1,6 +1,6 @@
 #!/bin/sh
 set -eu
 
-command='mise install && bun install --frozen-lockfile'
+command='mise trust --quiet && mise install && bun install --frozen-lockfile'
 
 exec sh -ec "$command"

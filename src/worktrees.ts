@@ -40,7 +40,6 @@ import {
   unregister,
 } from "./ledger";
 import { note } from "./log";
-import { trustLikePrimary } from "./mise";
 import { type Block, blockText } from "./ports";
 import {
   isWorktreeName,
@@ -269,7 +268,6 @@ async function blockFor(
 
 async function setUp(project: Project, name: WorktreeName | null, checkout: string, run: Run): Promise<void> {
   const block = name === null ? null : await blockFor(project, name, checkout, run);
-  if (name !== null) trustLikePrimary(project.primary, checkout);
   const hook = hookIn(project, checkout, "setup");
   if (hook !== null) {
     const exit = runHook(hook, checkout, { name, path: checkout, primary: project.primary, block });

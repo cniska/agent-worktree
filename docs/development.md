@@ -14,7 +14,7 @@ bin/agent-worktree create <name>
 ```
 
 - `mise install` installs actionlint, Bun and the dependencies, and the `bun install` its postinstall runs calls the `prepare` script, which points `core.hooksPath` at `.githooks/`. Only in the clone, never in a worktree, does it put `agent-worktree` in `~/.bun/bin` with `bun link`, so removing a worktree never leaves the command pointing at a deleted checkout. Add `~/.bun/bin` to your `PATH` if it is not there yet.
-- `bin/agent-worktree create <name>` makes a task worktree, trusts its `mise.toml` when it is the clone's trusted one unchanged, as [mise trust](contract.md#mise-trust) says, and runs the repository's own `.worktree-hooks/setup` in it, which installs the same way without linking the CLI. A branch that changes `mise.toml` leaves the worktree untrusted, so its setup fails until you review it and run `mise trust` there.
+- `bin/agent-worktree create <name>` makes a task worktree and runs the repository's own `.worktree-hooks/setup` in it, which installs the same way without linking the CLI.
 - `bin/agent-worktree` finds Bun through mise in `$MISE_DATA_DIR`, or `~/.local/share/mise` when that is unset, never through `XDG_DATA_HOME`, so a test or command that points `XDG_DATA_HOME` at a scratch directory still runs the CLI; `scripts/source-launcher.test.ts`, in the check, holds this. If you set `XDG_DATA_HOME` for your whole shell, set `MISE_DATA_DIR` to where mise keeps its installs.
 - `.githooks/` holds the commit-subject, format and no-comments gates.
 

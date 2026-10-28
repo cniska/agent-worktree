@@ -11,7 +11,7 @@ Flat, so a module is found by name. A file's prefix is its module: `cli-output.t
 | `cli-contract.ts` | What a command is, and the usage refusal |
 | `cli-output.ts` | Writing a result's TOON envelope to stdout, an event's line to stdout, and an error's TOON envelope to stderr |
 
-Another module reaches a module only through its bare-named file, so `cli`'s parts are its own and no module imports the entry. Only `git`, `hooks` and `mise` start a process; among the tests here, only `cli.test.ts`, which holds the one CLI runner, and the repo fixtures do. A module makes no error but a `CodedError`, and every `switch` ends in a `default` that calls `unreachable`. [`modules.test.ts`](modules.test.ts) holds each of these.
+Another module reaches a module only through its bare-named file, so `cli`'s parts are its own and no module imports the entry. Only `git` and `hooks` start a process; among the tests here, only `cli.test.ts`, which holds the one CLI runner, and the repo fixtures do. A module makes no error but a `CodedError`, and every `switch` ends in a `default` that calls `unreachable`. [`modules.test.ts`](modules.test.ts) holds each of these.
 
 ## Modules
 
@@ -27,7 +27,6 @@ Another module reaches a module only through its bare-named file, so `cli`'s par
 | `ports` | Port blocks: the range of 10-port units a block is made of, and whether another program listens on a unit's ports |
 | `git` | Run git and parse what it prints; the only module that runs git |
 | `hooks` | Write the project's hooks, find and run its setup and teardown hooks, and read how many ports it asks for |
-| `mise` | Trust a task worktree's mise config when the primary's trusted one is the same; the only module that runs mise |
 | `exit` | How a process ended |
 | `directory` | List a directory that may not exist |
 | `log` | A progress note on stderr |
