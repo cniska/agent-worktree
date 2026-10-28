@@ -86,6 +86,7 @@ const MODULES = [
   "paths",
   "git",
   "hooks",
+  "mise",
   "exit",
   "directory",
   "log",
@@ -96,7 +97,7 @@ const MODULES = [
 
 const ENTRY = "cli";
 
-const PROCESS_RUNNERS = new Set(["git", "hooks"]);
+const PROCESS_RUNNERS = new Set(["git", "hooks", "mise"]);
 
 const TEST_PROCESS_RUNNERS = new Set(["cli.test.ts", "repo.test-support.ts"]);
 
@@ -258,7 +259,7 @@ describe("the modules", () => {
     expect(allSources().flatMap(({ file, text }) => boundaryBreaches(file, text))).toEqual([]);
   });
 
-  test("only git and hooks start a process, and among the tests only cli.test.ts and the repo fixtures", () => {
+  test("only git, hooks and mise start a process, and among the tests only cli.test.ts and the repo fixtures", () => {
     expect(allSources().flatMap(({ file, text }) => processBreaches(file, text))).toEqual([]);
   });
 
@@ -326,7 +327,7 @@ describe("the module checks", () => {
     }
   });
 
-  test("catch a process started outside git and hooks", () => {
+  test("catch a process started outside git, hooks and mise", () => {
     for (const text of [
       'import { spawnSync } from "node:child_process";',
       'import { execFileSync } from "child_process";',

@@ -18,6 +18,16 @@ agent-worktree install --setup "mise install && pnpm install --frozen-lockfile" 
 
 [`SPEC.md`](../SPEC.md) states what each hook gets and when it runs (§2.8), and everything else that must hold.
 
+### mise trust
+
+mise trusts each directory's config apart, so a worktree's copy of a `mise.toml` the primary checkout trusts starts untrusted, and a setup that runs `mise install` fails on any config that needs trust. Before setup runs in a task worktree, `create` and `init` trust its mise config themselves with `mise trust`, and note it, when mise trusts the primary's and every mise config file in the worktree is the primary's unchanged, so the setup command needs no `mise trust` of its own.
+
+- **Changed config.** A worktree whose branch changes or adds a mise config file stays untrusted; review it, then run `mise trust` in the worktree.
+- **No mise.** Without mise on `PATH`, or without mise config in the worktree, nothing is trusted and nothing is said.
+- **A failed trust** never fails `create` or `init`; it notes the `mise trust` command that trusts the worktree.
+
+SPEC.md §2.16 names the config files compared.
+
 ### Only in your clone
 
 In a project whose other developers do not use agent-worktree, keep the hooks out of the repository with `--local`:

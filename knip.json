@@ -1,4 +1,5 @@
 {
   "$schema": "node_modules/knip/schema.json",
-  "project": ["src/**/*.ts", "acceptance/**/*.ts", "scripts/**/*.ts"]
+  "project": ["src/**/*.ts", "acceptance/**/*.ts", "scripts/**/*.ts"],
+  "ignoreBinaries": ["mise"]
 }
