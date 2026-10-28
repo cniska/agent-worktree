@@ -20,14 +20,14 @@ bin/agent-worktree create <name>
 
 ## Checks
 
-- `bun run check` runs the lint, the typecheck, knip (an export, file or dependency nothing uses) and the tests, and `.githooks/pre-commit.d/check` runs it before each commit.
+- `bun run check` runs the lint (oxlint, `oxfmt --check`, and actionlint over `.github/workflows/` at the version `mise.toml` pins), the typecheck, knip (an export, file or dependency nothing uses) and the tests, and `.githooks/pre-commit.d/check` runs it before each commit.
 - `bun run acceptance` proves the criteria in [`SPEC.md`](../SPEC.md) through the CLI alone, as [`AGENTS.md`](../AGENTS.md) describes. Each test gets 20 seconds rather than Bun's default 5, since one drives git and the CLI dozens of times and a `create` with a remote also reads and fetches it.
 - `scripts/build-compiled.sh <outfile>` compiles the CLI into one executable that needs no Bun, the binary a release ships.
 - `scripts/smoke.sh <executable> <version>` is the release's smoke test: the executable prints the version, then runs `create` and `remove` on a made-up worktree name in a scratch repository; the release runs it on each build and on each registry install.
 - `scripts/release.sh patch|minor|major` bumps the version and tags it; `.github/workflows/release.yml` builds the tag into a GitHub release, the npm packages and a Homebrew repin, as [Releasing](releasing.md) says.
-- `bun run format` formats `src/`, `acceptance/` and `scripts/` with Biome, and the format gate runs it with the linter off before each commit and stages what it changes in the staged files.
+- `bun run format` formats the TypeScript in `src/`, `acceptance/` and `scripts/` with oxfmt, and the format gate runs it before each commit and stages what it changes in the staged files.
 - `npm/agent-worktree` is the npm package's launcher, a POSIX shell script `scripts/build-npm.ts` fills with the release builds; `scripts/launcher.test.ts`, in the check, runs it over the layouts `npm` and `bun` install, with no runtime on `PATH`.
-- `.github/workflows/check.yml` runs the check, actionlint over `.github/workflows/` at the version `mise.toml` pins, and the acceptance suite on each push and pull request, and `commits.yml`, `format.yml` and `no-comments.yml` run the gates.
+- `.github/workflows/check.yml` runs the check and the acceptance suite on each push and pull request, and `commits.yml` and `no-comments.yml` run the gates.
 
 ## Layout
 
