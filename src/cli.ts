@@ -58,6 +58,10 @@ async function print(command: Command, args: readonly string[]): Promise<void> {
   switch (output.kind) {
     case "result":
       return writeResult(command.name, output.result);
+    case "verdict":
+      writeResult(command.name, output.result);
+      if (output.failed) process.exitCode = FAILURE;
+      return;
     case "event":
       return writeLine(output.line);
     default:

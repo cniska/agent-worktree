@@ -1,6 +1,6 @@
 # Commands
 
-The `agent-worktree` commands, where `create` cuts a branch and how `remove` settles one.
+The `agent-worktree` commands, where `create` cuts a branch, how `remove` settles one and what `doctor` checks.
 
 | Command | Does |
 | --- | --- |
@@ -12,13 +12,14 @@ The `agent-worktree` commands, where `create` cuts a branch and how `remove` set
 | `agent-worktree path <name>` | Print the worktree's `path`. |
 | `agent-worktree hook` | The plugin's `WorktreeCreate` and `WorktreeRemove` entry: reads the event from stdin, and prints the path, or the branch's outcome, alone on one line, as Claude Code reads it. |
 | `agent-worktree install [--local] [--setup <command>] [--teardown <command>] [--ports <n>]` | Write the hook each option names into `.worktree-hooks/`, or with `--local` into the clone's git directory, leaving the others as they are, and print the path of each as `hooks`. |
+| `agent-worktree doctor [--full]` | Report what agent-worktree, its plugin and the project need, as [What `doctor` checks](#what-doctor-checks) says; exit 1 when a check fails. |
 | `agent-worktree --version` | Print the version alone on one line. |
 
 `agent-worktree --help` lists every command's usage and summary, and `<command> --help` prints that command's.
 
 ## Output
 
-Every command but `hook` and `--version` prints one [TOON](https://toonformat.dev) document. A result goes to stdout with exit 0: the command, `ok: true` and the `result`, which is null for `init` and `prune`:
+Every command but `hook` and `--version` prints one [TOON](https://toonformat.dev) document. A result goes to stdout with exit 0, or 1 from `doctor` when a check fails: the command, `ok: true` and the `result`, which is null for `init` and `prune`:
 
 ```text
 command: ls
@@ -113,3 +114,33 @@ branch fix-login kept, not merged into origin/main
 branch fix-login kept, origin/fix-login has commits it lacks
 branch fix-login kept, checked out at /home/dev/other-checkout
 ```
+
+## What `doctor` checks
+
+`doctor` leads its result with `counts`, how many checks are `ok`, `warn` and `fail`, then lists in `checks` each check that warns or fails with its name, state, detail and fix. `--full` lists every check, each one that passes with a null fix. Its output:
+
+```text
+command: doctor
+ok: true
+result:
+  counts:
+    ok: 8
+    warn: 1
+    fail: 0
+  checks[1]{name,state,detail,fix}:
+    fix-login worktree,warn,its setup has not finished at /home/dev/.local/share/agent-worktree/app-3f9c2a1b/fix-login,"run agent-worktree create fix-login to resume its setup, then run agent-worktree doctor again"
+```
+
+`doctor` only reads: it runs no hook, frees no block, reaches no remote and probes no port.
+
+| Check | Reads | Warns or fails when | Fix |
+| --- | --- | --- | --- |
+| `git` | `PATH` | Fails: no executable `git` on it | Install git on `PATH` |
+| `agent-worktree` | `PATH` | Warns: no executable `agent-worktree`, so the plugin's hooks fail | Install it on the `PATH` Claude Code starts with |
+| `port blocks` | The machine's port blocks | Warns: a block's ledger entry is gone, in any project | `prune` |
+| `project` | The checkout `doctor` runs in | Warns: not a git checkout, or git is missing; fails: an unsupported layout | Run `doctor` in the project's checkout; put git on `PATH`; or the act the layout refusal names |
+| `setup hook`, `teardown hook`, `ports hook` | The setup and ports hooks as the checkout has them, the teardown hook as the primary has it | Fails: a setup or teardown hook that is not executable, or a ports hook that holds no count | The act the matching refusal names |
+| `<name> worktree` | Each worktree `ls` lists | Warns: any state but `ready` | `create` for `pending`; for the others the refusal `create` and `remove` give it: `prune` for `orphaned`, removing the directory for `unlisted` or `unmanaged`, the two acts for `legacy` |
+| `<name> ports` | Each `ready` or `pending` worktree's block and its own ports hook | Warns: a block it should not hold, none where its project asks for ports, or one of the wrong size, or its own ports hook holds no count | `init` in the worktree, or the refusal's act |
+
+The plugin's hooks see the `PATH` Claude Code started with, which can differ from a shell's. When Claude Code's worktrees fail to create, run `agent-worktree doctor` under that `PATH`.

@@ -39,6 +39,7 @@ const USAGES = [
   "agent-worktree path <name>",
   "agent-worktree hook",
   INSTALL_USAGE,
+  "agent-worktree doctor [--full]",
   "agent-worktree --version",
 ];
 
@@ -70,7 +71,7 @@ test("AC-24 results, refusals and usage errors exit 0, 1 and 2 with their TOON e
   });
   expect(usageRefused(run(w, p.dir, ["task-a"]), null)).toEqual({
     message: "task-a is not an agent-worktree command; agent-worktree --help lists them",
-    act: "agent-worktree create|init|remove|prune|ls|path|hook|install|--version",
+    act: "agent-worktree create|init|remove|prune|ls|path|hook|install|doctor|--version",
   });
   expect(existsSync(p.path("task-a"))).toBe(false);
   const unknownOption = usageRefused(run(w, p.dir, ["remove", "--bogus", "task-a"]), "remove");
@@ -91,7 +92,7 @@ test("AC-25 --help lists every command, or one with <command> --help", () => {
   const help = run(w, w.root, ["--help"]);
   expect({ exitCode: help.exitCode, stderr: help.stderr }).toEqual({ exitCode: 0, stderr: "" });
   expect(help.stdout).toStartWith(
-    "command: agent-worktree\nok: true\nresult:\n  commands[9]{usage,summary}:\n",
+    "command: agent-worktree\nok: true\nresult:\n  commands[10]{usage,summary}:\n",
   );
   expect(succeeded(help)).toEqual({
     commands: USAGES.map((usage) => ({ usage, summary: expect.stringMatching(/\S/) })),

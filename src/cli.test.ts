@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { existsSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { firstFreeUnit, fixture, hookEvent, removeScratchDirs, repo, scratchDir } from "./repo.test-support";
 
@@ -8,12 +8,17 @@ const CLI = resolve(import.meta.dir, "cli.ts");
 
 type Run = { readonly status: number | null; readonly stdout: string; readonly stderr: string };
 
-function cli(cwd: string, args: readonly string[], stdin: string | null = null): Run {
+function cli(
+  cwd: string,
+  args: readonly string[],
+  stdin: string | null = null,
+  path = process.env.PATH,
+): Run {
   const run = spawnSync(process.execPath, [CLI, ...args], {
     cwd,
     encoding: "utf8",
     input: stdin ?? undefined,
-    env: { ...process.env, FORCE_COLOR: "3" },
+    env: { ...process.env, PATH: path, FORCE_COLOR: "3" },
   });
   return { status: run.status, stdout: run.stdout, stderr: run.stderr };
 }
@@ -31,7 +36,7 @@ describe("the cli", () => {
     expect(help.status).toBe(0);
     expect(help.stderr).toBe("");
     expect(help.stdout).toStartWith(
-      toon(["command: agent-worktree", "ok: true", "result:", "  commands[9]{usage,summary}:"]),
+      toon(["command: agent-worktree", "ok: true", "result:", "  commands[10]{usage,summary}:"]),
     );
     expect(help.stdout).toContain(
       '\n    "agent-worktree remove [--force] <name>","run teardown and remove the worktree;',
@@ -74,7 +79,7 @@ describe("the cli", () => {
         "  code: usage",
         "  message: task-a is not an agent-worktree command; agent-worktree --help lists them",
         "  meta:",
-        "  resolve: agent-worktree create|init|remove|prune|ls|path|hook|install|--version",
+        "  resolve: agent-worktree create|init|remove|prune|ls|path|hook|install|doctor|--version",
       ]),
     });
     expect(existsSync(path("task-a"))).toBe(false);
@@ -134,6 +139,50 @@ describe("the cli", () => {
       stdout: toon(["command: prune", "ok: true", "result: null"]),
       stderr: "",
     });
+  });
+
+  test("doctor prints only the checks that fail or warn, and exits 1 when one fails", () => {
+    const { dir } = fixture();
+    const bin = scratchDir();
+    writeFileSync(join(bin, "agent-worktree"), "#!/bin/sh\n");
+    chmodSync(join(bin, "agent-worktree"), 0o755);
+    const onPath = `${bin}:${process.env.PATH}`;
+    const sound = cli(dir, ["doctor"], null, onPath);
+    expect(sound).toEqual({
+      status: 0,
+      stdout: toon([
+        "command: doctor",
+        "ok: true",
+        "result:",
+        "  counts:",
+        "    ok: 7",
+        "    warn: 0",
+        "    fail: 0",
+        "  checks: []",
+      ]),
+      stderr: "",
+    });
+    expect(cli(dir, ["doctor", "--full"], null, onPath).stdout).toContain(
+      "\n  checks[7]{name,state,detail,fix}:\n    git,ok,found at ",
+    );
+    const ports = join(dir, ".worktree-hooks", "ports");
+    writeFileSync(ports, "ten\n");
+    const failing = cli(dir, ["doctor"], null, onPath);
+    expect(failing.status).toBe(1);
+    expect(failing.stderr).toBe("");
+    expect(failing.stdout).toStartWith(
+      toon([
+        "command: doctor",
+        "ok: true",
+        "result:",
+        "  counts:",
+        "    ok: 6",
+        "    warn: 0",
+        "    fail: 1",
+        "  checks[1]{name,state,detail,fix}:",
+        `    ports hook,fail,"${ports} must hold`,
+      ]).trimEnd(),
+    );
   });
 
   test("ls prints every state at 0 and an empty list when there is nothing to list", () => {

@@ -9,6 +9,7 @@ type Values = { readonly [option: string]: OptionValue };
 
 export type Output =
   | { readonly kind: "result"; readonly result: JsonValue }
+  | { readonly kind: "verdict"; readonly result: JsonValue; readonly failed: boolean }
   | { readonly kind: "event"; readonly line: string };
 
 export type Command = {

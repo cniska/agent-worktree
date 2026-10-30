@@ -11,6 +11,6 @@ Claude Code's ExitWorktree refuses `action: "remove"` on every worktree a hook c
 
 ## Install
 
-The plugin brings neither Bun nor the CLI. Install the CLI first, as the [README](../README.md#install) says: with the plugin installed and no CLI on `PATH`, every Claude Code worktree fails to create.
+The plugin brings neither Bun nor the CLI. Install the CLI first, as the [README](../README.md#install) says: with the plugin installed and no CLI on `PATH`, every Claude Code worktree fails to create. Run [`agent-worktree doctor`](commands.md#what-doctor-checks) under the `PATH` Claude Code starts with to check it.
 
 To keep the plugin out of a project's shared settings, enable it only in your clone, as [Only in your clone](contract.md#only-in-your-clone) says.

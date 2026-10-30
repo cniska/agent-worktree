@@ -11,7 +11,7 @@ import {
   remotesOf,
   settleBranch,
 } from "./branches";
-import { refuser } from "./coded-error";
+import { type CodedError, refuser } from "./coded-error";
 import { directoryEntries } from "./directory";
 import { describeExit, type Exit, succeeded } from "./exit";
 import {
@@ -227,8 +227,30 @@ function stateAt(project: Project, name: WorktreeName): State {
   return stateIn(snapshot(project), project, name);
 }
 
-function legacyRefusal(project: Project, name: WorktreeName, worktree: Worktree) {
-  return refuse("legacy_location", { name, path: worktree.path, target: worktreePath(project, name) });
+type Refused = Extract<Listed["state"], { readonly kind: "unmanaged" | "orphaned" | "unlisted" | "legacy" }>;
+
+function stateRefusal(project: Project, path: string, state: Refused): CodedError {
+  switch (state.kind) {
+    case "unmanaged":
+      return refuse("unmanaged", { path });
+    case "orphaned":
+      return refuse("orphaned", { name: state.name });
+    case "unlisted":
+      return refuse("not_a_worktree", { name: state.name, path });
+    case "legacy":
+      return refuse("legacy_location", {
+        name: state.name,
+        path: state.worktree.path,
+        target: worktreePath(project, state.name),
+      });
+    default:
+      return unreachable(state);
+  }
+}
+
+export function listedRefusal(project: Project, { path, state }: Listed): CodedError | null {
+  if (state.kind === "ready" || state.kind === "pending") return null;
+  return stateRefusal(project, path, state);
 }
 
 function reap(project: Project, name: WorktreeName, path: string | null): FailedTeardown | null {
@@ -348,13 +370,10 @@ export async function create(project: Project, name: WorktreeName, request: Crea
       ignoredFrom(name, from);
       return path;
     case "unmanaged":
-      throw refuse("unmanaged", { path });
     case "orphaned":
-      throw refuse("orphaned", { name });
     case "unlisted":
-      throw refuse("not_a_worktree", { name, path });
     case "legacy":
-      throw legacyRefusal(project, name, state.worktree);
+      throw stateRefusal(project, path, state);
     case "absent":
       add(project, name, path, snap, creation);
       break;
@@ -375,13 +394,10 @@ function removable(project: Project, name: WorktreeName): Worktree {
     case "absent":
       throw refuse("not_registered", { name, path });
     case "unmanaged":
-      throw refuse("unmanaged", { path });
     case "orphaned":
-      throw refuse("orphaned", { name });
     case "unlisted":
-      throw refuse("not_a_worktree", { name, path });
     case "legacy":
-      throw legacyRefusal(project, name, state.worktree);
+      throw stateRefusal(project, path, state);
     case "pending":
     case "ready":
       return state.worktree;
@@ -543,7 +559,7 @@ function managedName(project: Project, checkout: string): WorktreeName | null {
     case "ready":
       return name;
     case "legacy":
-      throw legacyRefusal(project, name, state.worktree);
+      throw stateRefusal(project, checkout, state);
     case "absent":
     case "unmanaged":
     case "orphaned":

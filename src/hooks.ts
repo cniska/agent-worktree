@@ -104,7 +104,7 @@ function isAccessRefusal(error: unknown): boolean {
   return code !== null && NOT_EXECUTABLE.has(code);
 }
 
-function isExecutable(path: string): boolean {
+export function isExecutable(path: string): boolean {
   try {
     accessSync(path, constants.X_OK);
     return true;

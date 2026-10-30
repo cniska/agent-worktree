@@ -274,8 +274,17 @@ function freeStale(holder: string, stale: readonly Unit[]): void {
   if (freed !== null) note(`port block ${blockText(freed)} freed from ${holder}, which is gone`);
 }
 
-export function freeStaleBlocks(): void {
+export type StaleBlock = { readonly holder: string; readonly block: Block };
+
+export function staleBlocks(): readonly StaleBlock[] {
   const all = claims();
-  const gone = new Set(all.map((claim) => claim.holder).filter((holder) => !existsSync(holder)));
-  for (const holder of gone) freeStale(holder, unitsHeldBy(all, holder));
+  const gone = [...new Set(all.map((claim) => claim.holder))].filter((holder) => !existsSync(holder));
+  return gone.flatMap((holder) => {
+    const block = heldBy(all, holder);
+    return block === null ? [] : [{ holder, block }];
+  });
+}
+
+export function freeStaleBlocks(): void {
+  for (const { holder, block } of staleBlocks()) freeStale(holder, block);
 }

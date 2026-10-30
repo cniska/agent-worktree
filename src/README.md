@@ -18,6 +18,7 @@ Another module reaches a module only through its bare-named file, so `cli`'s par
 | Prefix | Responsibility |
 | --- | --- |
 | `cli` | The `agent-worktree` command line, over the domain below |
+| `doctor` | The checks `doctor` reports: the programs on `PATH`, stale port blocks, and the project's hooks, worktrees and their blocks |
 | `worktrees` | The lifecycle: create, init, remove, prune and list, from a worktree's state read fresh each time |
 | `branches` | Settle the branch of a removed worktree against its remote: whether it landed, and deleting it there and here; and the base `create` cuts a new branch from |
 | `event` | Parse a Claude Code `WorktreeCreate` or `WorktreeRemove` event into a worktree name |

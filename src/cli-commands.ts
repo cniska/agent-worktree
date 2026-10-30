@@ -1,8 +1,10 @@
 import { readFileSync } from "node:fs";
+import { delimiter } from "node:path";
 import type { JsonObject } from "@toon-format/toon";
 import { unreachable } from "./assert";
 import { fateRecord, fateText } from "./branches";
 import { type Command, type OptionValue, result, usageRefusal } from "./cli-contract";
+import { CHECK_STATES, doctor } from "./doctor";
 import { parseEvent } from "./event";
 import { install } from "./hooks";
 import { blockText, PORT_LIMIT, type PortRequest, parsePortRequest } from "./ports";
@@ -203,6 +205,33 @@ function portsOption(value: OptionValue, command: Command): PortRequest | null {
   return request;
 }
 
+function searchPath(): readonly string[] {
+  return (process.env.PATH ?? "").split(delimiter).filter((dir) => dir !== "");
+}
+
+const doctorCommand: Command = {
+  name: "doctor",
+  usage: "agent-worktree doctor [--full]",
+  summary:
+    "report what agent-worktree and its plugin need: git and agent-worktree on PATH, port blocks held by gone worktrees, and in a project its hooks, its worktrees and their port blocks, each check ok, warn or fail with its fix; only those that warn or fail, or with --full every one; exit 1 when one fails",
+  options: { full: { type: "boolean" } },
+  async run(positionals, values) {
+    noPositionals(positionals, this);
+    const checks = doctor({ cwd: process.cwd(), searchPath: searchPath() });
+    const shown = values.full === true ? checks : checks.filter((check) => check.state !== "ok");
+    return {
+      kind: "verdict",
+      result: {
+        counts: Object.fromEntries(
+          CHECK_STATES.map((state) => [state, checks.filter((check) => check.state === state).length]),
+        ),
+        checks: shown.map(({ name, state, detail, fix }) => ({ name, state, detail, fix })),
+      },
+      failed: checks.some((check) => check.state === "fail"),
+    };
+  },
+};
+
 const installCommand: Command = {
   name: "install",
   usage: "agent-worktree install [--local] [--setup <command>] [--teardown <command>] [--ports <n>]",
@@ -246,4 +275,5 @@ export const COMMANDS: readonly Command[] = [
   pathCommand,
   hookCommand,
   installCommand,
+  doctorCommand,
 ];

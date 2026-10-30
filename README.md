@@ -62,8 +62,9 @@ Claude Code makes worktrees of its own, for EnterWorktree and for subagents, wit
 | `agent-worktree prune` | Tear down gone worktrees and remove those whose branch landed |
 | `agent-worktree ls [--full]` | Count the worktrees in each state and list them; also what `agent-worktree` alone prints |
 | `agent-worktree path <name>` | Print the worktree's path |
+| `agent-worktree doctor [--full]` | Report what agent-worktree, its plugin and the project need, each check with its fix |
 
-Each command prints its result, or its error, as one [TOON](https://toonformat.dev) document. [Commands](docs/commands.md) lists every command and its output, where `create` cuts a branch and how `remove` settles one.
+Each command prints its result, or its error, as one [TOON](https://toonformat.dev) document. [Commands](docs/commands.md) lists every command and its output, where `create` cuts a branch, how `remove` settles one and what `doctor` checks.
 
 ## Docs
 
