@@ -114,6 +114,26 @@ describe("doctor", () => {
     );
   });
 
+  test("looks past a PATH directory it cannot search", () => {
+    const f = fixture();
+    const sealed = scratchDir();
+    chmodSync(sealed, 0o000);
+    const bin = binWith(["git", "agent-worktree"]);
+    const checks = (() => {
+      try {
+        return doctor({ cwd: f.dir, searchPath: [sealed, bin] });
+      } finally {
+        chmodSync(sealed, 0o755);
+      }
+    })();
+    expect(named(checks, "git")).toEqual({
+      name: "git",
+      state: "ok",
+      detail: `found at ${join(bin, "git")}`,
+      fix: null,
+    });
+  });
+
   test("outside a checkout, warns that no project check ran", () => {
     const outside = scratchDir();
     const checks = doctor({ cwd: outside, searchPath: [binWith(["git", "agent-worktree"])] });
@@ -206,6 +226,47 @@ describe("doctor", () => {
         name: "task-a ports",
         state: "warn",
         detail: `holds port block ${blockText(blockAt(first))}, which is not one run of the 20 ports its project asks for`,
+        fix: `run agent-worktree init in ${path}, ${RERUN}`,
+      },
+    ]);
+  });
+
+  test("warns of a block its worktree no longer asks for, and of a worktree ports hook that holds no count", async () => {
+    const f = fixture({ ports: 10 });
+    const first = await firstFreeUnit();
+    const unasked = await create(f.project, f.name("task-a"), { here: f.dir, from: null });
+    rmSync(join(unasked, HOOKS, "ports"));
+    const broken = await create(f.project, f.name("task-b"), { here: f.dir, from: null });
+    const ports = join(broken, HOOKS, "ports");
+    writeFileSync(ports, "ten\n");
+    const checks = failing(doctor({ cwd: f.dir, searchPath: [binWith(["git", "agent-worktree"])] }));
+    expect(checks).toEqual([
+      {
+        name: "task-a ports",
+        state: "warn",
+        detail: `holds port block ${blockText(blockAt(first))}, though its project asks for no ports`,
+        fix: `run agent-worktree init in ${unasked}, ${RERUN}`,
+      },
+      {
+        name: "task-b ports",
+        state: "warn",
+        detail: `${ports} must hold one whole number of ports from 1 to 1000, and holds: "ten\\n"`,
+        fix: `run agent-worktree install --ports <n> in ${broken} with the number of ports the worktree needs, or delete ${ports} when it needs none, then run the command again`,
+      },
+    ]);
+  });
+
+  test("warns of a worktree that holds no block though its own ports hook now asks for some", async () => {
+    const f = fixture();
+    const path = await create(f.project, f.name("task-a"), { here: f.dir, from: null });
+    writeFileSync(join(path, HOOKS, "ports"), "10\n");
+    const checks = failing(doctor({ cwd: f.dir, searchPath: [binWith(["git", "agent-worktree"])] }));
+    expect(checks).toEqual([
+      {
+        name: "task-a ports",
+        state: "warn",
+        detail:
+          "holds no port block, though its project asks for 10 ports, so its hooks get no WORKTREE_PORT",
         fix: `run agent-worktree init in ${path}, ${RERUN}`,
       },
     ]);

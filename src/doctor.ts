@@ -49,8 +49,7 @@ function lookUp(program: string, searchPath: readonly string[]): string | null {
   return (
     searchPath
       .map((dir) => join(dir, program))
-      .find((file) => statSync(file, { throwIfNoEntry: false })?.isFile() === true && isExecutable(file)) ??
-    null
+      .find((file) => isExecutable(file) && statSync(file).isFile()) ?? null
   );
 }
 
