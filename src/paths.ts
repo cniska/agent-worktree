@@ -6,7 +6,7 @@ type Env = Readonly<Record<string, string | undefined>>;
 
 const DATA_NAME = "agent-worktree";
 
-function homeDir(env: Env): string {
+export function homeDir(env: Env): string {
   const home = env.HOME;
   return home !== undefined && home.trim() !== "" ? home : homedir();
 }
@@ -15,6 +15,12 @@ export function dataDir(env: Env = process.env): string {
   const base = env.XDG_DATA_HOME;
   if (base !== undefined && isAbsolute(base)) return join(base, DATA_NAME);
   return join(homeDir(env), ".local", "share", DATA_NAME);
+}
+
+export function stateDir(env: Env): string {
+  const base = env.XDG_STATE_HOME;
+  if (base !== undefined && isAbsolute(base)) return join(base, DATA_NAME);
+  return join(homeDir(env), ".local", "state", DATA_NAME);
 }
 
 export function resolvedPath(path: string): string {

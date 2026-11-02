@@ -36,6 +36,8 @@ export type World = {
   readonly env: Env;
 };
 
+export const UPDATE_CHECK_OFF = "AGENT_WORKTREE_NO_UPDATE_CHECK";
+
 const scratchDirs: string[] = [];
 
 function scratchDir(): string {
@@ -68,6 +70,7 @@ export function world(): World {
       GIT_COMMITTER_NAME: "Test Author",
       GIT_COMMITTER_EMAIL: "author@example.test",
       BUN_RUNTIME_TRANSPILER_CACHE_PATH: NO_TRANSPILER_CACHE,
+      [UPDATE_CHECK_OFF]: "1",
     },
   };
 }
@@ -78,7 +81,7 @@ const OFFLINE = [
   '(version 1)(allow default)(deny network*)(allow network-outbound (remote ip "localhost:*"))',
 ];
 
-type RunOptions = { readonly stdin?: string; readonly env?: Env; readonly unset?: readonly string[] };
+export type RunOptions = { readonly stdin?: string; readonly env?: Env; readonly unset?: readonly string[] };
 
 function environment(w: World, { env, unset }: RunOptions): Env {
   return Object.fromEntries(Object.entries({ ...w.env, ...env }).filter(([name]) => !unset?.includes(name)));
@@ -146,6 +149,16 @@ export function toolsOnly(w: World, tools: readonly string[]): string {
 
 export function runOnPath(w: World, cwd: string, path: string, args: readonly string[]): Ran {
   return spawn(w, cwd, ["agent-worktree", ...args], { env: { PATH: path } });
+}
+
+export function runBinary(
+  w: World,
+  cwd: string,
+  binary: string,
+  args: readonly string[],
+  options: RunOptions = {},
+): Ran {
+  return spawn(w, cwd, [binary, ...args], options);
 }
 
 export function runProgram(w: World, cwd: string, argv: readonly string[], env: Env): Ran {

@@ -17,6 +17,8 @@ export function isolateGit(env: NodeJS.ProcessEnv): void {
 
 isolateGit(process.env);
 
+process.env.AGENT_WORKTREE_NO_UPDATE_CHECK = "1";
+
 const scratchHome = realpathSync(mkdtempSync(join(tmpdir(), "agent-worktree-home-")));
 
 const SCRATCH_DIRS = {

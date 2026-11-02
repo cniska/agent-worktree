@@ -40,7 +40,19 @@ bun add -g @cniska/agent-worktree
 
 The curl line installs `~/.local/bin/agent-worktree` and, when that directory is not on your `PATH`, adds it to `~/.zshrc` for zsh or to an existing `~/.bashrc` or `~/.bash_profile` for bash, and otherwise asks you to add it. Each channel updates the way it installed: `brew upgrade agent-worktree`, `npm update -g @cniska/agent-worktree`, `bun update -g @cniska/agent-worktree`, or the curl line run again.
 
-Then install the Claude Code plugin:
+### Updates
+
+Once a day, an installed `agent-worktree` asks the channel it came from for the latest release, giving up after a second. While a newer one is out, every command prints one line on stderr before anything else, with its stdout and exit code unchanged:
+
+```text
+agent-worktree 0.3.1 is out (running 0.3.0): run brew upgrade agent-worktree; if you cannot, tell the user.
+```
+
+The line names the upgrade for the channel it was installed through. The check runs only for an install it can place: one Homebrew, npm or Bun installed, or the curl line's `~/.local/bin/agent-worktree`. It records when it last asked in `${XDG_STATE_HOME:-~/.local/state}/agent-worktree/update-check.json`. Set `AGENT_WORKTREE_NO_UPDATE_CHECK=1` to turn it off; it is also off when `CI` is set, and under the plugin's `agent-worktree hook`.
+
+### Claude Code plugin
+
+Install the Claude Code plugin:
 
 ```bash
 claude plugin install cniska-worktree@cniska

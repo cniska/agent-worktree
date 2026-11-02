@@ -2,10 +2,11 @@
 import { parseArgs } from "node:util";
 import { version } from "../package.json";
 import { unreachable } from "./assert";
-import { COMMANDS, LIVE_VIEW } from "./cli-commands";
+import { COMMANDS, hookCommand, LIVE_VIEW } from "./cli-commands";
 import { type Command, type Output, result, USAGE_CODE, usageRefusal } from "./cli-contract";
 import { writeError, writeLine, writeResult } from "./cli-output";
 import { CodedError, messageOf } from "./coded-error";
+import { updateNotice } from "./update";
 
 const TOOL = "agent-worktree";
 
@@ -76,6 +77,17 @@ function refuseUsage(detail: string, usage: string): void {
 
 const [name, ...args] = process.argv.slice(2);
 const command = COMMANDS.find((candidate) => candidate.name === name);
+
+if (command !== hookCommand) {
+  const line = await updateNotice({
+    env: process.env,
+    executable: process.execPath,
+    running: version,
+    now: Date.now(),
+    fetch,
+  });
+  if (line !== null) process.stderr.write(`${line}\n`);
+}
 
 if (name === undefined) {
   await print(LIVE_VIEW, []);

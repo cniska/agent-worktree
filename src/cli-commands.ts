@@ -171,7 +171,7 @@ const pathCommand: Command = {
   },
 };
 
-const hookCommand: Command = {
+export const hookCommand: Command = {
   name: "hook",
   usage: "agent-worktree hook",
   summary: "handle a Claude Code WorktreeCreate or WorktreeRemove event read from stdin",

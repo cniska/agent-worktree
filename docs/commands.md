@@ -53,7 +53,7 @@ error:
   resolve: run agent-worktree ls to see the registered names
 ```
 
-A worktree's state is `ready`, `pending` while its setup has not finished, `orphaned` when its directory is gone, `unlisted` when git does not list it, `unmanaged` for a directory agent-worktree did not register, or `legacy` in the earlier location. Progress notes, such as the port block `create` claims, go to stderr as `agent-worktree: <note>` lines.
+A worktree's state is `ready`, `pending` while its setup has not finished, `orphaned` when its directory is gone, `unlisted` when git does not list it, `unmanaged` for a directory agent-worktree did not register, or `legacy` in the earlier location. Progress notes, such as the port block `create` claims, go to stderr as `agent-worktree: <note>` lines. When a newer release is out, an installed build prints one line on stderr before them, as the README's [Updates](../README.md#updates) says.
 
 ## Where `create` cuts a branch
 

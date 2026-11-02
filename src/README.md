@@ -23,7 +23,8 @@ Another module reaches a module only through its bare-named file, so `cli`'s par
 | `branches` | Settle the branch of a removed worktree against its remote: whether it landed, and deleting it there and here; and the base `create` cuts a new branch from |
 | `event` | Parse a Claude Code `WorktreeCreate` or `WorktreeRemove` event into a worktree name |
 | `project` | The project a directory belongs to, worktree names, and where a worktree lives: under the data directory, keyed by project, or in the earlier location inside the primary |
-| `paths` | The XDG data directory, read from the environment on every call |
+| `paths` | The XDG data and state directories, read from the environment on every call |
+| `update` | The update notice: the channel an installed build came from, a check of its latest version at most once a day, and the line that names the upgrade |
 | `ledger` | The record of registered worktrees and whether their setup finished, under the git common dir, and of which worktree holds which port block, under the data directory for every project on the machine |
 | `ports` | Port blocks: the range of 10-port units a block is made of, and whether another program listens on a unit's ports |
 | `git` | Run git and parse what it prints; the only module that runs git |
