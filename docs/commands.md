@@ -140,7 +140,7 @@ result:
 | `port blocks` | The machine's port blocks | Warns: a block's ledger entry is gone, in any project | `prune` |
 | `project` | The checkout `doctor` runs in | Warns: not a git checkout, or git is missing; fails: an unsupported layout | Run `doctor` in the project's checkout; put git on `PATH`; or the act the layout refusal names |
 | `setup hook`, `teardown hook`, `ports hook` | The setup and ports hooks as the checkout has them, the teardown hook as the primary has it | Fails: a setup or teardown hook that is not executable, or a ports hook that holds no count | The act the matching refusal names |
-| `<name> worktree` | Each worktree `ls` lists | Warns: any state but `ready` | `create` for `pending`; for the others the refusal `create` and `remove` give it: `prune` for `orphaned`, removing the directory for `unlisted` or `unmanaged`, the two acts for `legacy` |
+| `<name> worktree` | Each worktree `ls` lists | Warns: any state but `ready` | `create` for `pending`; for the others the refusal `create` and `remove` give it: `prune` for `orphaned`, removing the directory then `prune` for `unlisted`, removing it for `unmanaged`, the two acts for `legacy` |
 | `<name> ports` | Each `ready` or `pending` worktree's block and its own ports hook | Warns: a block it should not hold, none where its project asks for ports, or one of the wrong size, or its own ports hook holds no count | `init` in the worktree, or the refusal's act |
 
 The plugin's hooks see the `PATH` Claude Code started with, which can differ from a shell's. When Claude Code's worktrees fail to create, run `agent-worktree doctor` under that `PATH`.
